@@ -1,0 +1,25 @@
+[Unit]
+Description=Backeddy Kopia Repository Server (backups dos PCs Windows)
+After=network-online.target local-fs.target
+Wants=network-online.target
+
+[Service]
+EnvironmentFile=/etc/backeddy/kopia/server.env
+Environment=KOPIA_CONFIG_PATH=/etc/backeddy/kopia/repository.config
+Environment=KOPIA_CACHE_DIRECTORY=/var/cache/backeddy-kopia
+Environment=KOPIA_LOG_DIR=/var/log/backeddy-kopia
+ExecStart=/usr/bin/kopia server start \
+  --address=0.0.0.0:51515 \
+  --tls-cert-file=/etc/backeddy/kopia/tls.cert \
+  --tls-key-file=/etc/backeddy/kopia/tls.key \
+  --server-control-username=server-control \
+  --server-control-password=${KOPIA_SERVER_CONTROL_PASSWORD} \
+  --no-ui
+Restart=on-failure
+RestartSec=10
+Nice=10
+IOSchedulingClass=best-effort
+IOSchedulingPriority=6
+
+[Install]
+WantedBy=multi-user.target

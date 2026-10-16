@@ -1,0 +1,60 @@
+#!/bin/bash
+# backeddy — comandos do Backeddy Server
+#   backeddy status            situação do servidor
+#   backeddy add-pc NOME       autoriza um PC Windows a fazer backup (Kopia)
+#   backeddy passwd            troca a senha usada pelos Macs
+set -euo pipefail
+ETC=/etc/backeddy; DATA=/srv/backeddy; KCONF=$ETC/kopia
+[ "$(id -u)" = 0 ] || { echo "Use: sudo backeddy $*"; exit 1; }
+. "$ETC/server.conf"
+kenv() {
+  export KOPIA_CONFIG_PATH="$KCONF/repository.config" KOPIA_CACHE_DIRECTORY=/var/cache/backeddy-kopia KOPIA_LOG_DIR=/var/log/backeddy-kopia
+  export KOPIA_PASSWORD; KOPIA_PASSWORD=$(cat "$KCONF/repo-password")
+}
+svc() { systemctl is-active --quiet "$1" && echo "🟢 $2" || echo "🔴 $2 (parado: sudo systemctl status $1)"; }
+
+case "${1:-status}" in
+  status)
+    echo "🌀 $NAME  ·  $SLUG.local  ·  $(hostname -I | awk '{print $1}')  ·  Backeddy Server $VERSION"
+    echo
+    svc smbd "Time Machine (Samba)"
+    svc avahi-daemon "Anúncio na rede (Avahi)"
+    svc backeddy-kopia "Kopia Server (PCs)"
+    echo
+    df -h "$DATA" | awk 'NR==2{printf "💾 Disco: %s usados de %s (%s livres, %s)\n",$3,$2,$4,$5}'
+    TM=$(du -sh "$DATA/timemachine" 2>/dev/null | cut -f1); echo "   Time Machine: ${TM:-0}"
+    KP=$(du -sh "$DATA/kopia" 2>/dev/null | cut -f1); echo "   PCs (Kopia): ${KP:-0}"
+    echo
+    for d in $(lsblk -dno NAME,TYPE | awk '$2=="disk"{print $1}'); do
+      H=$(smartctl -H "/dev/$d" 2>/dev/null | awk -F: '/overall-health|SMART Health Status/{gsub(/^ +/,"",$2);print $2}')
+      case "$H" in PASSED|OK) echo "🟢 /dev/$d saudável" ;; "") echo "⚪ /dev/$d sem SMART (normal em máquina virtual)" ;; *) echo "🔴 /dev/$d: $H — troque este disco!" ;; esac
+    done
+    echo
+    echo "🔐 Impressão digital do certificado (PCs): $(cat "$KCONF/fingerprint")"
+    ;;
+  add-pc)
+    PC="${2:-}"; [ -n "$PC" ] || { echo "Use: sudo backeddy add-pc NOME-DO-PC"; exit 1; }
+    PC=$(echo "$PC" | tr '[:upper:]' '[:lower:]' | tr -cs 'a-z0-9-' '-' | sed 's/^-//;s/-$//')
+    PW=$(openssl rand -base64 18 | tr -d '/+=' | cut -c1-16)
+    kenv
+    kopia server user add "backeddy@$PC" --user-password="$PW" >/dev/null
+    kopia server refresh --address=https://127.0.0.1:51515 --insecure \
+      --server-control-username=server-control --server-control-password="$(cat "$KCONF/control-password")" >/dev/null 2>&1 \
+      || systemctl restart backeddy-kopia
+    cat <<MSG
+✅ PC "$PC" autorizado.
+
+No PC (teste manual com o Kopia, até o Backeddy for Windows existir):
+  kopia repository connect server --url=https://$SLUG.local:51515 \\
+    --server-cert-fingerprint=$(cat "$KCONF/fingerprint") \\
+    --override-username=backeddy --override-hostname=$PC
+  Senha: $PW
+
+Guarde esta senha: ela não é mostrada de novo.
+MSG
+    ;;
+  passwd)
+    smbpasswd backeddy
+    ;;
+  *) sed -n '2,5p' "$0"; exit 1 ;;
+esac
