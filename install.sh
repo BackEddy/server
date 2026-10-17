@@ -21,7 +21,7 @@
 # Pode ser rodado de novo com segurança: reaplica as configurações.
 set -euo pipefail
 
-VERSION="0.6.4"
+VERSION="0.7.0"
 NAME="Backup da Casa"
 DISKS=()
 MIRROR=1
@@ -194,6 +194,11 @@ if [ "$RECOVER" = 1 ]; then
       [ -f "$CFG/kopia/$f" ] && install -m 0600 "$CFG/kopia/$f" "$ETC/kopia/$f"
     done
     if [ ! -f "$ETC/alerts.conf" ] && [ -f "$CFG/alerts.conf" ]; then install -m 0644 "$CFG/alerts.conf" "$ETC/alerts.conf"; fi
+    # redes Wi-Fi conhecidas (se o instalador já conectou numa, ela fica; as guardadas completam)
+    if [ -d "$CFG/iwd" ]; then
+      install -d -m 0700 /var/lib/iwd
+      for f in "$CFG"/iwd/*; do [ -f "$f" ] && [ ! -e "/var/lib/iwd/$(basename "$f")" ] && install -m 0600 "$f" /var/lib/iwd/; done
+    fi
     ok "Configuração recuperada: \"$NAME\", senhas dos PCs e certificado"
   else
     echo "  Aviso: estes discos não têm a configuração guardada (instalados antes da versão 0.5)."
@@ -340,6 +345,10 @@ if [ -f "$ETC/disks.conf" ] && mountpoint -q "$DATA"; then
   for f in repo-password control-password tls.cert tls.key fingerprint; do
     [ -f "$ETC/kopia/$f" ] && install -m 0600 "$ETC/kopia/$f" "$CFG/kopia/$f"
   done
+  if [ -n "$(ls -A /var/lib/iwd 2>/dev/null)" ]; then
+    install -d -m 0700 "$CFG/iwd"
+    for f in /var/lib/iwd/*; do [ -f "$f" ] && install -m 0600 "$f" "$CFG/iwd/"; done
+  fi
   ok "Configuração guardada nos discos de backup (para recuperar o servidor)"
 fi
 

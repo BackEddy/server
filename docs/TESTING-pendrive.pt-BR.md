@@ -1,7 +1,7 @@
-# Testando a imagem do pendrive (0.6)
+# Testando a imagem do pendrive (0.7)
 
 A imagem é montada no GitHub Actions e testada no Hyper-V, sem pendrive: o arquivo `.vhdx`
-faz o papel do pendrive. Nesta versão: **só UEFI** (PCs de ~2012 para cá) e **só rede por cabo**.
+faz o papel do pendrive. Nesta versão: **só UEFI** (PCs de ~2012 para cá). Wi-Fi só se não houver cabo (seção 8, em notebook de verdade).
 
 ## 1. Montar a imagem no GitHub
 
@@ -113,9 +113,25 @@ Start-VM $vm
 - [ ] `sudo backeddy alerts` lista o alerta como reconhecido; `sudo backeddy status` mostra quanto o
       Time Machine pode crescer ("pode crescer até …") e quanto os PCs usam
 
+## 8. Wi-Fi e notebook (0.7, hardware de verdade)
+
+O Hyper-V não tem Wi-Fi: use um notebook velho, **sem cabo de rede**.
+
+- [ ] Depois da senha do servidor aparece **"Rede Wi-Fi"** com as redes por perto (sinal em %, com senha/aberta)
+- [ ] Senha errada → "Senha errada"; senha certa → "Conectado pelo Wi-Fi" com o aviso de que cabo é mais rápido
+- [ ] "Outra rede" deixa digitar o nome; "Já liguei o cabo" segue pelo cabo
+- [ ] Notebook sem placa que funcione → "Não achei placa de Wi-Fi… conecte um cabo"
+- [ ] Primeiro boot e reinício: volta sozinho no Wi-Fi; a tela mostra `Rede: Wi-Fi "…" · sinal N%`
+- [ ] Ligar o cabo: `sudo backeddy status` passa a mostrar `Rede: cabo`; tirar o cabo: volta para o Wi-Fi
+- [ ] No servidor (teclado e monitor): `sudo backeddy wifi` lista, conecta em outra rede e a tela atualiza
+- [ ] Tampa fechada: continua funcionando
+- [ ] Status mostra `Bateria: N% · na tomada`; tirar da tomada → `Sem energia na tomada` e, em ~1 min, bipa
+      (reconhecer no painel ou numa tecla); voltar para a tomada → o alerta some
+
 ## Se algo der errado
 
 - Instalador gráfico não abriu (tela preta ou modo texto): tire uma foto. Alt+F2 abre outro console
   (usuário `root`, sem senha): `cat /tmp/backeddy-install.log` e `ls /dev/fb*`.
   Para usar o modo texto: `backeddy-installer --text`.
 - Primeiro boot: entre como `admin` e rode `sudo cat /var/log/backeddy-firstboot.log`.
+- Wi-Fi no instalador: Alt+F2, `iw dev` (a placa aparece?), `iwctl station list` e `journalctl -u iwd`.

@@ -170,16 +170,8 @@ func run(ui Frontend, dry bool, fake, planFile string) error {
 	}
 	in.Password = askPassword(ui, recover)
 
-	// 6. Rede (só cabo nesta versão)
-	for !dry && !hasNetwork() {
-		if ui.Choose("Sem conexão de rede", ToneWarn, []string{
-			"Conecte este computador ao roteador com um cabo de rede.",
-			"",
-			"O servidor precisa estar na mesma rede dos Macs e PCs. (Wi-Fi chega numa próxima versão.)",
-		}, []string{"Tentar de novo", "Continuar sem rede"}, 0, nil) == 1 {
-			break
-		}
-	}
+	// 6. Rede: cabo; sem cabo, Wi-Fi (wifi.go)
+	in.Wifi = askNetwork(ui, dry)
 
 	// 6b. Alarme: teste de bipe e silêncio à noite
 	in.BeepOK, in.QuietStart, in.QuietEnd = askAlarm(ui, dry)

@@ -10,8 +10,9 @@ install -m 0644 "$REPO/config/backeddy-firstboot.service" "$R/etc/systemd/system
 install -m 0755 "$REPO/bin/backeddy" "$R/usr/local/bin/backeddy"
 install -m 0755 "$W/backeddy-agent" "$R/opt/backeddy-server/bin/backeddy-agent"   # compilado pelo build.sh
 
-# Rede por cabo: DHCP em qualquer placa
-mkdir -p "$R/etc/systemd/network"
+# Rede: cabo em qualquer placa (preferido) e Wi-Fi (rede escolhida no instalador ou com: sudo backeddy wifi).
+# Com os dois ligados, o cabo ganha (RouteMetric menor); se o cabo cair, o Wi-Fi assume.
+mkdir -p "$R/etc/systemd/network" "$R/etc/iwd"
 cat > "$R/etc/systemd/network/20-cabo.network" <<'EOF'
 [Match]
 Name=en* eth*
@@ -19,13 +20,36 @@ Name=en* eth*
 [Network]
 DHCP=yes
 MulticastDNS=no
+
+[DHCPv4]
+RouteMetric=100
+
+[IPv6AcceptRA]
+RouteMetric=100
 EOF
+cat > "$R/etc/systemd/network/25-wifi.network" <<'EOF'
+[Match]
+Name=wl*
+
+[Network]
+DHCP=yes
+MulticastDNS=no
+IgnoreCarrierLoss=3s
+
+[DHCPv4]
+RouteMetric=600
+
+[IPv6AcceptRA]
+RouteMetric=600
+EOF
+# o iwd só conecta; o endereço (DHCP) é do systemd-networkd
+printf '[General]\nEnableNetworkConfiguration=false\n' > "$R/etc/iwd/main.conf"
 
 # o anúncio na rede (mDNS) é do Avahi: o resolved não pode disputar a porta 5353
 mkdir -p "$R/etc/systemd/resolved.conf.d"
 printf '[Resolve]\nMulticastDNS=no\nLLMNR=no\n' > "$R/etc/systemd/resolved.conf.d/backeddy.conf"
 
-chroot "$R" systemctl enable systemd-networkd systemd-resolved ssh backeddy-firstboot >/dev/null 2>&1
+chroot "$R" systemctl enable systemd-networkd systemd-resolved iwd ssh backeddy-firstboot >/dev/null 2>&1
 
 # Nome provisório, fuso e idioma (o install.sh troca o nome no primeiro boot)
 echo backeddy > "$R/etc/hostname"

@@ -45,6 +45,8 @@ log "Instalador (Go)"
     go build -buildvcs=false -trimpath -ldflags "-s -w -X main.version=$VER" -o "$W/backeddy-installer" . )
 
 FIRMWARE="firmware-linux-free,firmware-misc-nonfree,firmware-realtek"
+# Wi-Fi (0.7): firmwares das placas mais comuns + iwd (conecta) + iw (lista as redes)
+FIRMWARE="$FIRMWARE,firmware-iwlwifi,firmware-atheros,firmware-brcm80211,firmware-mediatek,iwd,iw,wireless-regdb"
 
 log "1/3 Sistema do servidor"
 TARGET_PKGS="linux-image-amd64,systemd-sysv,systemd-resolved,udev,kmod,dbus,sudo,openssh-server,\

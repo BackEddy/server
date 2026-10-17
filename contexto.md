@@ -38,8 +38,15 @@ Créditos: Eddy Antonini — eddyantonini.com.br.
   do Force TM na primeira abertura. Repo transferido `lordironballs/force-tm` → `BackEddy/mac` (redirects ok).
 - Fora da Mac App Store por causa do sandbox (decisão aceita).
 - Pendente: ícone e screenshot com a marca Backeddy (ainda são do Force TM).
-- Futuro (2.1): aba **Servidor** (mede o Mac, recomenda disco, grava o pendrive do Backeddy Server,
-  detecta o servidor e configura o Time Machine com um clique).
+- **2.1.0** (17/10/2026, testada): **Criar pendrive do Backeddy Server** (Sources/Pendrive.swift: lista discos físicos
+  removíveis sem o do Mac e os do TM; baixa o .img.xz da última release + SHA256SUMS, cache em
+  ~/Library/Caches/br.com.backeddy.mac/pendrive; confirma digitando APAGAR; grava com `/usr/libexec/authopen
+  -stdoutpipe` (recebe o fd por SCM_RIGHTS) descompactando xz com Compression/LZMA em blocos alinhados; ejeta) e
+  **Configurar o Time Machine** (Sources/TMSetup.swift: Bonjour `_backeddy._tcp`, confere a senha em /api/login,
+  `tmutil setdestination [-a] smb://backeddy:SENHA@slug.local/TimeMachine && tmutil enable && tmutil startbackup`
+  via runAdmin; pergunta "usar os dois" se já houver destino). Info.plist ganhou NSLocalNetworkUsageDescription,
+  NSBonjourServices e NSAllowsLocalNetworking.
+- Futuro: aba **Servidor** (status do servidor, reconhecer alertas).
 
 ## Backeddy for Windows (especificado)
 
@@ -220,6 +227,22 @@ HDs CMR (evitar SMR); notebook é ótimo (8–15 W, bateria = nobreak).
 - O .exe não some depois de escolher disco e tamanho: uma janela só mostra as etapas (download com MB/% via
   WebClient.DownloadFileTaskAsync, cópia em pedaços), vira a de Ejetar pendrive e depois a de "Preparando o servidor".
 - Pasta da VM no disco escolhido: `X:\BackEddyVM` (antes `X:\Backeddy`). O download vira o pendrive.vhdx direto (Move).
+
+### 0.7.0 — Wi-Fi e notebook como servidor (17/10/2026, ainda não testada em hardware)
+- Imagem: iwd + iw + wireless-regdb e firmwares iwlwifi/atheros/brcm80211/mediatek (além de realtek/misc-nonfree),
+  no instalador e no servidor. networkd: 20-cabo (RouteMetric 100) e 25-wifi `wl*` (RouteMetric 600, o cabo ganha);
+  iwd com EnableNetworkConfiguration=false (DHCP é do networkd).
+- Instalador (installer/wifi.go): só sem cabo. Placa Wi-Fi → lista as 4 redes mais fortes (`iw dev X scan`,
+  sem escondidas/802.1X), "Outra rede" (digitar o nome), senha → `iwctl --passphrase … station X connect`,
+  espera DHCP 30 s; senha errada pede de novo; aviso "Wi-Fi é mais lento". Sem placa: pede o cabo.
+  O perfil (/var/lib/iwd) é copiado para o servidor e para a cópia de configuração nos discos (recuperação).
+- `backeddy wifi` (só no próprio servidor, decisão do Eddy): lista, escolhe, senha, conecta, atualiza a cópia e a tela.
+- Status/tela/painel: "Rede: cabo (enp…)" ou "Wi-Fi "X" · sinal N%" (aviso abaixo de 35%); "Sem rede" + como resolver.
+  Alerta `no-net`.
+- Modo notebook (só se houver /sys/class/power_supply/BAT*): bateria no status; sem energia na tomada → alerta
+  `power` (bipa) e desliga com segurança em 10%. Tampa fechada já não suspendia (logind, desde 0.3).
+- Testes: parseIwScan, roteiro com Wi-Fi (senha errada → certa) e sem placa. Risco: nomes de pacotes de firmware
+  no trixie não conferidos daqui (sem acesso ao Debian); se o build falhar, ajustar a lista em image/build.sh.
 
 ## Pendências gerais
 - Teste real de backup do Time Machine e de um PC no Kopia (ainda não feitos, por opção).

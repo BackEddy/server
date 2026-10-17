@@ -9,10 +9,12 @@ PARTLABEL=backeddy-inst  /                  ext4  defaults,noatime              
 LABEL=BACKEDDY           /run/backeddy-plan vfat  ro,nofail,x-systemd.device-timeout=5s  0 0
 EOF
 
-# Rede por cabo
-mkdir -p "$R/etc/systemd/network"
-printf '[Match]\nName=en* eth*\n\n[Network]\nDHCP=yes\n' > "$R/etc/systemd/network/20-cabo.network"
-chroot "$R" systemctl enable systemd-networkd >/dev/null 2>&1
+# Rede: cabo (preferido) e Wi-Fi (só se não houver cabo; o instalador pergunta a rede e a senha)
+mkdir -p "$R/etc/systemd/network" "$R/etc/iwd"
+printf '[Match]\nName=en* eth*\n\n[Network]\nDHCP=yes\n\n[DHCPv4]\nRouteMetric=100\n' > "$R/etc/systemd/network/20-cabo.network"
+printf '[Match]\nName=wl*\n\n[Network]\nDHCP=yes\nIgnoreCarrierLoss=3s\n\n[DHCPv4]\nRouteMetric=600\n' > "$R/etc/systemd/network/25-wifi.network"
+printf '[General]\nEnableNetworkConfiguration=false\n' > "$R/etc/iwd/main.conf"
+chroot "$R" systemctl enable systemd-networkd iwd >/dev/null 2>&1
 
 # Entra direto no instalador no tty1 (sem login).
 # O programa roda a partir da memória (/run): assim o pendrive pode ser retirado no fim,

@@ -12,6 +12,7 @@
 #   backeddy ack [DIAS]        reconhece os alertas: para de bipar e lembra de novo em DIAS (padrão 1)
 #   backeddy quiet INÍCIO FIM  silêncio à noite (ex.: 22 8) · backeddy quiet off
 #   backeddy issue             atualiza a tela do monitor do servidor (situação + como conectar)
+#   backeddy wifi              escolhe a rede Wi-Fi (no próprio servidor, com teclado e monitor)
 set -euo pipefail
 ETC=/etc/backeddy; DATA=/srv/backeddy; KCONF=$ETC/kopia
 [ "$(id -u)" = 0 ] || { echo "Use: sudo backeddy $*"; exit 1; }
@@ -70,10 +71,84 @@ tm_limit() {
 }
 human() { numfmt --to=iec --suffix=B "$1" 2>/dev/null || echo "$1"; }
 
+# ---------- Rede (cabo ou Wi-Fi) ----------
+wifi_if() { local w; w=$(ls -d /sys/class/net/*/wireless 2>/dev/null | head -1); [ -n "$w" ] && basename "$(dirname "$w")"; return 0; }
+net_dev() { ip -4 route show default 2>/dev/null | awk '{for (i = 1; i < NF; i++) if ($i == "dev") { print $(i + 1); exit }}'; }
+net_status() {
+  local dev ssid sig pct
+  dev=$(net_dev)
+  if [ -z "$dev" ]; then
+    echo "$I_BAD Sem rede: os Macs e PCs não alcançam o servidor"
+    if [ -n "$(wifi_if)" ]; then
+      echo "$IND Wi-Fi: com teclado e monitor neste servidor, entre como admin e rode: sudo backeddy wifi"
+    else
+      echo "$IND Ligue o cabo de rede no roteador."
+    fi
+    return 0
+  fi
+  if [ -d "/sys/class/net/$dev/wireless" ]; then
+    IFS=$'\t' read -r ssid sig < <(iw dev "$dev" link 2>/dev/null | awk '
+      /^[[:space:]]*SSID:/ { sub(/^[[:space:]]*SSID: /, ""); s = $0 }
+      /^[[:space:]]*signal:/ { g = $2 }
+      END { printf "%s\t%s\n", s, g }') || true
+    sig=${sig%.*}; [ -n "$sig" ] || sig=-100
+    pct=$(( 2 * (sig + 100) )); [ "$pct" -gt 100 ] && pct=100; [ "$pct" -lt 0 ] && pct=0
+    if [ "$pct" -lt 35 ]; then
+      echo "$I_WARN Rede: Wi-Fi \"$ssid\" · sinal fraco ($pct%): backups lentos. Aproxime do roteador ou use cabo"
+    else
+      echo "$I_OK Rede: Wi-Fi \"$ssid\" · sinal $pct%"
+    fi
+  else
+    echo "$I_OK Rede: cabo ($dev)"
+  fi
+}
+# lista "sinal<TAB>com_senha<TAB>nome", uma por rede (a mais forte), da melhor para a pior
+wifi_scan() {
+  iw dev "$1" scan 2>/dev/null | awk '
+    function emit() {
+      if (s == "" || s ~ /\\x00/ || ent) return
+      p = int(2 * (sig + 100)); if (p > 100) p = 100; if (p < 0) p = 0
+      if (!(s in best) || p > best[s]) { best[s] = p; sec[s] = enc }
+    }
+    /^BSS / { emit(); s = ""; sig = -100; enc = 0; ent = 0; next }
+    /^[[:space:]]+SSID: / { s = $0; sub(/^[[:space:]]+SSID: /, "", s) }
+    /^[[:space:]]+signal: / { sig = $2 }
+    /^[[:space:]]+(RSN|WPA):/ { enc = 1 }
+    /capability:.*Privacy/ { enc = 1 }
+    /Authentication suites:.*802\.1X/ && !/PSK|SAE/ { ent = 1 }
+    END { emit(); for (k in best) printf "%d\t%d\t%s\n", best[k], sec[k], k }' | sort -t$'\t' -k1,1nr
+}
+save_wifi_cfg() {   # cópia das redes nos discos de backup (para o "Recuperar o servidor")
+  [ -f "$ETC/disks.conf" ] && mountpoint -q "$DATA" || return 0
+  install -d -m 0700 "$DATA/.backeddy/iwd"
+  for f in /var/lib/iwd/*; do [ -f "$f" ] && install -m 0600 "$f" "$DATA/.backeddy/iwd/"; done
+  return 0
+}
+
+# ---------- Bateria (notebook como servidor) ----------
+BAT=$(ls -d /sys/class/power_supply/BAT* 2>/dev/null | head -1 || true)
+on_battery() {   # 0 = sem energia na tomada, rodando na bateria
+  [ -n "$BAT" ] || return 1
+  local a
+  for a in /sys/class/power_supply/*; do
+    [ "$(cat "$a/type" 2>/dev/null)" = Mains ] && [ "$(cat "$a/online" 2>/dev/null)" = 0 ] && return 0
+  done
+  [ "$(cat "$BAT/status" 2>/dev/null)" = Discharging ]
+}
+bat_pct() { cat "$BAT/capacity" 2>/dev/null || echo "?"; }
+
 case "${1:-status}" in
   status)
     echo "$I_HEAD $NAME  ·  $SLUG.local  ·  $(hostname -I | awk '{print $1}')  ·  Backeddy Server $VERSION"
     echo
+    net_status
+    if [ -n "$BAT" ]; then
+      if on_battery; then
+        echo "$I_BAD Sem energia na tomada: rodando na bateria ($(bat_pct)%). Desliga sozinho, com segurança, em 10%"
+      else
+        echo "$I_OK Bateria: $(bat_pct)% · na tomada (a bateria funciona como nobreak)"
+      fi
+    fi
     svc smbd "Time Machine (Samba)"
     svc avahi-daemon "Anúncio na rede (Avahi)"
     svc backeddy-kopia "Kopia Server (PCs)"
@@ -289,6 +364,16 @@ MSG
     ;;
   check)
     # Uma linha por alerta: ID|texto. Usado pelo vigia (backeddy-agent) a cada minuto.
+    [ -n "$(net_dev)" ] || echo "no-net|Servidor sem rede: os Macs e PCs não alcançam o servidor"
+    if [ -n "$BAT" ] && on_battery; then
+      P=$(bat_pct)
+      echo "power|Sem energia na tomada: o servidor está na bateria (${P}%)"
+      # desliga com segurança antes de a bateria acabar (desligar de repente pode estragar os backups)
+      if [ "$P" != "?" ] && [ "$P" -le 10 ]; then
+        logger -t backeddy "bateria em ${P}% sem energia na tomada: desligando com segurança"
+        systemctl poweroff >/dev/null 2>&1 || true
+      fi
+    fi
     for u in smbd:"Time Machine (Samba) parado" backeddy-kopia:"Servidor dos PCs (Kopia) parado" avahi-daemon:"Anúncio na rede (Avahi) parado"; do
       st=$(systemctl is-active "${u%%:*}" 2>/dev/null || true)
       [ "$st" = active ] || [ "$st" = activating ] || echo "svc-${u%%:*}|${u#*:}"
@@ -354,5 +439,56 @@ MSG
       *) echo "Use: sudo backeddy quiet 22 8   (ou: sudo backeddy quiet off)"; exit 1 ;;
     esac
     ;;
-  *) sed -n '2,14p' "$0"; exit 1 ;;
+  wifi)
+    IF=$(wifi_if)
+    [ -n "$IF" ] || { echo "Este computador não tem placa de Wi-Fi que funcione. Use cabo de rede."; exit 1; }
+    systemctl start iwd >/dev/null 2>&1 || true
+    ip link set "$IF" up >/dev/null 2>&1 || true
+    CUR=$(net_dev)
+    [ -n "$CUR" ] && [ ! -d "/sys/class/net/$CUR/wireless" ] && echo "Aviso: este servidor está no cabo ($CUR). O Wi-Fi fica de reserva, se o cabo sair."
+    echo "Procurando redes Wi-Fi…"
+    LIST=""
+    for _ in 1 2 3 4; do LIST=$(wifi_scan "$IF" | head -15); [ -n "$LIST" ] && break; sleep 2; done
+    mapfile -t NETS <<< "$LIST"
+    echo
+    i=0
+    for n in "${NETS[@]}"; do
+      [ -n "$n" ] || continue
+      i=$((i + 1)); IFS=$'\t' read -r p e ss <<< "$n"
+      printf '  %2d) %s  (sinal %s%%, %s)\n' "$i" "$ss" "$p" "$([ "$e" = 1 ] && echo "com senha" || echo "aberta")"
+    done
+    [ "$i" -eq 0 ] && echo "  Nenhuma rede encontrada."
+    echo "   0) Digitar o nome de outra rede"
+    echo
+    read -rp "Número da rede: " N
+    SEC=1
+    if [ "$N" = 0 ]; then
+      read -rp "Nome da rede (maiúsculas contam): " SSID
+    elif [[ "$N" =~ ^[0-9]+$ ]] && [ "$N" -ge 1 ] && [ "$N" -le "$i" ]; then
+      IFS=$'\t' read -r _ SEC SSID <<< "${NETS[$((N - 1))]}"
+    else
+      echo "Número inválido."; exit 1
+    fi
+    [ -n "$SSID" ] || exit 1
+    PW=""
+    if [ "$SEC" = 1 ]; then read -rsp "Senha do Wi-Fi \"$SSID\": " PW; echo; fi
+    echo "Conectando em \"$SSID\"…"
+    if [ -n "$PW" ]; then OUT=$(iwctl --passphrase "$PW" station "$IF" connect "$SSID" 2>&1) && R=0 || R=$?
+    else OUT=$(iwctl station "$IF" connect "$SSID" 2>&1) && R=0 || R=$?; fi
+    if [ "$R" != 0 ]; then
+      iwctl known-networks "$SSID" forget >/dev/null 2>&1 || true
+      echo "$I_BAD Não conectou: senha errada ou rede fora de alcance. ($OUT)"; exit 1
+    fi
+    for _ in $(seq 1 30); do ip -4 addr show dev "$IF" | grep -q 'inet ' && break; sleep 1; done
+    if ip -4 addr show dev "$IF" | grep -q 'inet '; then
+      echo "$I_DONE Conectado em \"$SSID\": $(ip -4 -o addr show dev "$IF" | awk '{print $4}' | cut -d/ -f1)"
+      echo "   O servidor reconecta sozinho nesta rede depois de reiniciar ou se ela cair."
+      save_wifi_cfg
+      "$0" issue >/dev/null 2>&1 || true
+    else
+      echo "$I_WARN Conectou no Wi-Fi, mas o roteador não deu endereço. Tente reiniciar o roteador."
+      exit 1
+    fi
+    ;;
+  *) sed -n '2,15p' "$0"; exit 1 ;;
 esac

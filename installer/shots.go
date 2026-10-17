@@ -122,6 +122,22 @@ func runShots(dir string) error {
 			g.stage = StageInstall
 			g.drawProgress("Instalando o Backeddy Server", Steps, 2, "Não desligue o computador.", 3)
 		}},
+		{"06-wifi", func(g *GUI) {
+			g.stage = StageName
+			nets := parseIwScan(iwShot)
+			cards := make([]Card, len(nets))
+			for i, n := range nets {
+				lock := "Aberta (sem senha)"
+				if n.Secured {
+					lock = "Com senha"
+				}
+				cards[i] = Card{Title: n.SSID, Value: fmt.Sprintf("%d%%", n.Signal), Desc: bars(n.Signal) + " · " + lock, Plain: true}
+			}
+			g.drawCards("Rede Wi-Fi", []string{
+				"Não encontrei cabo de rede. Escolha a sua rede Wi-Fi.",
+				"Cabo é melhor: o primeiro backup pelo Wi-Fi é bem mais lento. Se ligar o cabo depois, o servidor passa a usá-lo sozinho.",
+			}, cards, 0, []string{"Conectar", "Outra rede", "Procurar de novo", "Já liguei o cabo"}, 0)
+		}},
 		{"10-pronto", func(g *GUI) {
 			g.stage = StageDone
 			g.drawChoose("Pronto!", ToneOK, DoneLines, []string{"Reiniciar"}, 0)
@@ -148,3 +164,5 @@ func runShots(dir string) error {
 	}
 	return nil
 }
+
+const iwShot = "BSS 1(on wlan0)\n\tsignal: -48.00 dBm\n\tSSID: Minha Casa\n\tRSN: x\nBSS 2(on wlan0)\n\tsignal: -66.00 dBm\n\tSSID: VIVOFIBRA-2G-8A21\n\tRSN: x\nBSS 3(on wlan0)\n\tsignal: -75.00 dBm\n\tSSID: Vizinho 5G\n\tRSN: x\nBSS 4(on wlan0)\n\tsignal: -84.00 dBm\n\tSSID: Padaria Free\n"

@@ -27,10 +27,11 @@ type Installer struct {
 	Password             string
 	Plan                 *Plan
 	DryRun               bool
-	TMPercent            int  // % do espaço para o Time Machine
-	Recover              bool // reinstala só o sistema e mantém o volume de backups
-	BeepOK               bool // o PC tem alto-falante (teste do alarme)
-	QuietStart, QuietEnd int  // silêncio à noite (-1 = bipar a qualquer hora)
+	TMPercent            int    // % do espaço para o Time Machine
+	Recover              bool   // reinstala só o sistema e mantém o volume de backups
+	BeepOK               bool   // o PC tem alto-falante (teste do alarme)
+	QuietStart, QuietEnd int    // silêncio à noite (-1 = bipar a qualquer hora)
+	Wifi                 string // rede Wi-Fi escolhida no instalador ("" = cabo)
 
 	log       *os.File
 	espPart   string
@@ -252,6 +253,9 @@ func (in *Installer) configure() error {
 		env += "NO_MIRROR=1\n"
 	}
 	if err := in.writeFile(target+"/etc/backeddy/firstboot.env", env, 0600); err != nil {
+		return err
+	}
+	if err := in.copyWifiProfiles(); err != nil {
 		return err
 	}
 

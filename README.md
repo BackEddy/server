@@ -16,7 +16,9 @@
 - **Alerts**: when something is wrong (dead mirror disk, failing disk, backups stopped, disk full, a Mac without backups for 7 days) the server **beeps every minute** until someone acknowledges it — in the web panel (`http://name.local`), a key on the server's keyboard, or `backeddy ack`; quiet hours at night.
 - **Space is shared automatically**: PCs use what they need; Time Machine gets the rest (minus headroom), recalculated hourly.
 - **Already have a Windows server/NAS?** `windows/Instalar Backeddy.cmd` creates a ready Backeddy VM (Hyper-V, or VirtualBox on Windows Home) — nothing gets formatted — and a tray watcher that beeps on the Windows side.
-- **Never sleeps** (laptop lid closed is fine), **automatic security updates**, **SMART disk monitoring**.
+- **Wi-Fi when there's no cable** (USB stick): the installer lists the networks and asks for the password; cable always wins when plugged in. Change networks later on the server itself with `sudo backeddy wifi`.
+- **Old laptop as a server**: lid closed is fine, the battery works as a UPS, the server beeps when the power goes out and shuts down safely at 10%.
+- **Never sleeps**, **automatic security updates**, **SMART disk monitoring**.
 - The server's own screen shows its health and how to connect (Mac, Windows, SSH), always up to date.
 - `backeddy status` / `add-pc` / `passwd` / `replace-disk` / `add-disk` helper.
 
