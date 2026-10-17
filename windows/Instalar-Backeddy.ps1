@@ -1,8 +1,11 @@
-﻿# Backeddy Server para Windows — cria uma máquina virtual pronta, sem formatar nada.
+﻿# Backeddy Server para Windows — cria uma máquina virtual, sem formatar nada.
 # Para quem já tem um PC/servidor/NAS com Windows ligado o tempo todo.
 #
+# A VM dá partida pelo "pendrive virtual" (a mesma imagem do pendrive de verdade): a pessoa faz a
+# instalação na tela da VM e, no fim, clica em "Ejetar pendrive" aqui; a VM reinicia sozinha.
+#
 # Uso: clique duas vezes em "Instalar Backeddy.cmd" (ele pede permissão de administrador).
-#      Opcional: -Imagem C:\caminho\backeddy-server-X-vm.vhdx (sem isso, baixa a versão mais recente)
+#      Opcional: -Imagem C:\caminho\backeddy-server-X.vhdx (ou .vdi); sem isso, baixa a versão mais recente
 #
 # Escolha automática: usa o Hyper-V (liga se preciso, com uma reinicialização) e, se não der,
 # o VirtualBox (Windows Home). Este arquivo precisa ficar salvo em UTF-8 com BOM (acentos no PowerShell 5).
@@ -139,73 +142,56 @@ if ($Motor -eq "hyperv") {
 }
 Log "motor: $Motor"
 
-# ---------- 2. Perguntas (uma janela só) ----------
+# ---------- 2. Onde e de que tamanho (uma janela só) ----------
 function Show-Form {
     $f = New-Object Windows.Forms.Form
-    $f.Text = "Instalar o Backeddy Server"; $f.Size = New-Object Drawing.Size(520, 470)
+    $f.Text = "Instalar o Backeddy Server"; $f.Size = New-Object Drawing.Size(520, 330)
     $f.StartPosition = "CenterScreen"; $f.FormBorderStyle = "FixedDialog"; $f.MaximizeBox = $false
     $f.Font = New-Object Drawing.Font("Segoe UI", 10)
-    $y = 16
     function Label($t, $yy, $h = 22) { $l = New-Object Windows.Forms.Label; $l.Text = $t; $l.Location = New-Object Drawing.Point(20, $yy); $l.Size = New-Object Drawing.Size(470, $h); $f.Controls.Add($l); $l }
-    $intro = Label "Backeddy Server dentro deste Windows: backup do Time Machine dos Macs e dos PCs da casa. Nada aqui é apagado." $y 44
-    $y += 52
-    Label "Nome do servidor (aparece no Mac e no Windows):" $y | Out-Null; $y += 24
-    $tName = New-Object Windows.Forms.TextBox; $tName.Text = "Backup da Casa"; $tName.Location = New-Object Drawing.Point(20, $y); $tName.Width = 460; $f.Controls.Add($tName); $y += 36
-    Label "Senha (mínimo 6 caracteres), duas vezes:" $y | Out-Null; $y += 24
-    $tP1 = New-Object Windows.Forms.TextBox; $tP1.UseSystemPasswordChar = $true; $tP1.Location = New-Object Drawing.Point(20, $y); $tP1.Width = 225; $f.Controls.Add($tP1)
-    $tP2 = New-Object Windows.Forms.TextBox; $tP2.UseSystemPasswordChar = $true; $tP2.Location = New-Object Drawing.Point(255, $y); $tP2.Width = 225; $f.Controls.Add($tP2); $y += 36
-    Label "Unidade onde ficam os backups:" $y | Out-Null; $y += 24
-    $cDrive = New-Object Windows.Forms.ComboBox; $cDrive.DropDownStyle = "DropDownList"; $cDrive.Location = New-Object Drawing.Point(20, $y); $cDrive.Width = 460; $f.Controls.Add($cDrive); $y += 36
-    $drives = Get-PSDrive -PSProvider FileSystem | Where-Object { $_.Free -gt 20GB } | Sort-Object Free -Descending
+    Label "O Backeddy Server vai rodar numa máquina virtual dentro deste Windows. Nada aqui é apagado. Nome e senha você escolhe na tela da máquina virtual, já já." 16 64 | Out-Null
+    Label "Unidade onde ficam os backups:" 90 | Out-Null
+    $cDrive = New-Object Windows.Forms.ComboBox; $cDrive.DropDownStyle = "DropDownList"; $cDrive.Location = New-Object Drawing.Point(20, 114); $cDrive.Width = 460; $f.Controls.Add($cDrive)
+    $drives = @(Get-PSDrive -PSProvider FileSystem | Where-Object { $_.Free -gt 70GB } | Sort-Object Free -Descending)
     foreach ($d in $drives) { [void]$cDrive.Items.Add(("{0}:  {1:N0} GB livres" -f $d.Name, ($d.Free / 1GB))) }
     if ($cDrive.Items.Count -gt 0) { $cDrive.SelectedIndex = 0 }
-    $lSize = Label "Tamanho do disco de backup (GB):" $y; $y += 24
-    $nSize = New-Object Windows.Forms.NumericUpDown; $nSize.Location = New-Object Drawing.Point(20, $y); $nSize.Width = 120
-    $nSize.Minimum = 20; $nSize.Maximum = 64000; $f.Controls.Add($nSize)
-    $hint = Label "" ($y + 2); $hint.Location = New-Object Drawing.Point(150, ($y + 2)); $hint.Size = New-Object Drawing.Size(330, 40)
+    Label "Tamanho do disco de backup (GB):" 154 | Out-Null
+    $nSize = New-Object Windows.Forms.NumericUpDown; $nSize.Location = New-Object Drawing.Point(20, 178); $nSize.Width = 120
+    $nSize.Minimum = 40; $nSize.Maximum = 64000; $f.Controls.Add($nSize)
+    $hint = Label "" 180 40; $hint.Location = New-Object Drawing.Point(150, 180); $hint.Size = New-Object Drawing.Size(330, 40)
     $upd = {
         if ($cDrive.SelectedIndex -ge 0) {
-            $d = $drives[$cDrive.SelectedIndex]; $free = [math]::Floor($d.Free / 1GB)
-            $rec = [math]::Max(20, [math]::Floor($free * 0.8))
-            $nSize.Maximum = [math]::Max(20, $free - 5); $nSize.Value = [math]::Min($rec, $nSize.Maximum)
-            $hint.Text = "Recomendado: $rec GB (80% do livre). O arquivo cresce aos poucos, conforme os backups."
+            $d = $drives[$cDrive.SelectedIndex]; $free = [math]::Floor($d.Free / 1GB) - 25
+            $rec = [math]::Max(40, [math]::Floor($free * 0.8))
+            $nSize.Maximum = [math]::Max(40, $free); $nSize.Value = [math]::Min($rec, $nSize.Maximum)
+            $hint.Text = "Recomendado: $rec GB. O arquivo cresce aos poucos, conforme os backups."
         }
     }
     $cDrive.Add_SelectedIndexChanged($upd); & $upd
-    $y += 50
-    $cQuiet = New-Object Windows.Forms.CheckBox; $cQuiet.Text = "Sem alarme das 22h às 8h (o Windows bipa se algo der errado)"; $cQuiet.Checked = $true
-    $cQuiet.Location = New-Object Drawing.Point(20, $y); $cQuiet.Width = 470; $f.Controls.Add($cQuiet); $y += 40
-    $ok = New-Object Windows.Forms.Button; $ok.Text = "Instalar"; $ok.Location = New-Object Drawing.Point(300, $y); $ok.Size = New-Object Drawing.Size(90, 32)
-    $cancel = New-Object Windows.Forms.Button; $cancel.Text = "Cancelar"; $cancel.Location = New-Object Drawing.Point(395, $y); $cancel.Size = New-Object Drawing.Size(90, 32)
+    $ok = New-Object Windows.Forms.Button; $ok.Text = "Continuar"; $ok.Location = New-Object Drawing.Point(290, 240); $ok.Size = New-Object Drawing.Size(95, 32)
+    $cancel = New-Object Windows.Forms.Button; $cancel.Text = "Cancelar"; $cancel.Location = New-Object Drawing.Point(390, 240); $cancel.Size = New-Object Drawing.Size(95, 32)
     $cancel.DialogResult = "Cancel"; $f.CancelButton = $cancel; $f.AcceptButton = $ok
     $f.Controls.Add($ok); $f.Controls.Add($cancel)
     $ok.Add_Click({
-        if ($tName.Text.Trim() -eq "") { Msg "Escolha um nome." | Out-Null; return }
-        if ($tP1.Text.Length -lt 6) { Msg "A senha precisa ter pelo menos 6 caracteres." | Out-Null; return }
-        if ($tP1.Text -ne $tP2.Text) { Msg "As senhas não conferem." | Out-Null; return }
-        if ($cDrive.SelectedIndex -lt 0) { Msg "Nenhuma unidade com pelo menos 20 GB livres." | Out-Null; return }
+        if ($cDrive.SelectedIndex -lt 0) { Msg "Nenhuma unidade com pelo menos 70 GB livres." | Out-Null; return }
         $f.DialogResult = "OK"; $f.Close()
     })
     if ($f.ShowDialog() -ne "OK") { return $null }
-    return [pscustomobject]@{
-        Name = $tName.Text.Trim(); Password = $tP1.Text; Drive = $drives[$cDrive.SelectedIndex].Name
-        SizeGB = [int]$nSize.Value; Quiet = $cQuiet.Checked
-    }
+    return [pscustomobject]@{ Drive = $drives[$cDrive.SelectedIndex].Name; SizeGB = [int]$nSize.Value }
 }
 $cfg = Show-Form
 if ($null -eq $cfg) { exit }
 $Dir = "$($cfg.Drive):\Backeddy"
 New-Item -ItemType Directory -Force -Path $Dir | Out-Null
-Log "nome=$($cfg.Name) pasta=$Dir tamanho=$($cfg.SizeGB)GB silêncio=$($cfg.Quiet)"
+Log "pasta=$Dir tamanho=$($cfg.SizeGB)GB"
 
-# ---------- 3. Imagem do sistema ----------
+# ---------- 3. Pendrive virtual (a imagem do instalador) ----------
 $Ext = if ($Motor -eq "hyperv") { "vhdx" } else { "vdi" }
-$Sys = Join-Path $Dir "sistema.$Ext"
 if (-not $Imagem) {
     try {
         $rel = Invoke-RestMethod -UseBasicParsing "https://api.github.com/repos/BackEddy/server/releases/latest"
-        $asset = $rel.assets | Where-Object { $_.name -like "*-vm.$Ext" } | Select-Object -First 1
-        if ($null -eq $asset) { throw "a versão $($rel.tag_name) não tem imagem de VM" }
+        $asset = $rel.assets | Where-Object { $_.name -match "^backeddy-server-[\d.]+\.$Ext$" } | Select-Object -First 1
+        if ($null -eq $asset) { throw "a versão $($rel.tag_name) não tem o pendrive em .$Ext" }
         $dl = Join-Path $Dir $asset.name
         Log "baixando $($asset.browser_download_url)"
         $ProgressPreference = "SilentlyContinue"
@@ -214,144 +200,162 @@ if (-not $Imagem) {
     } catch {
         Log "download: $_"
         $ofd = New-Object Windows.Forms.OpenFileDialog
-        $ofd.Title = "Não deu para baixar. Escolha o arquivo backeddy-server-...-vm.$Ext"
-        $ofd.Filter = "Imagem da VM (*-vm.$Ext)|*-vm.$Ext|Todos (*.*)|*.*"
+        $ofd.Title = "Não deu para baixar. Escolha o arquivo backeddy-server-X.$Ext (o pendrive)"
+        $ofd.Filter = "Pendrive do Backeddy (*.$Ext)|*.$Ext|Todos (*.*)|*.*"
         if ($ofd.ShowDialog() -ne "OK") { exit }
         $Imagem = $ofd.FileName
     }
 }
 if (-not (Test-Path $Imagem)) { Falha "Imagem não encontrada: $Imagem" }
-Copy-Item -Force $Imagem $Sys
-Log "sistema: $Sys (de $Imagem)"
+$Usb = Join-Path $Dir "pendrive.$Ext"
+Copy-Item -Force $Imagem $Usb      # cópia: a original fica intacta para reinstalar
+Log "pendrive: $Usb (de $Imagem)"
 
-# ---------- 4. Disco de backup e disquinho de configuração ----------
+# ---------- 4. Discos: sistema (20 GB) e backups ----------
+$Sys = Join-Path $Dir "sistema.$Ext"
 $Data = Join-Path $Dir "backups.$Ext"
-if (-not (Test-Path $Data)) {
-    if ($Motor -eq "hyperv") { New-VHD -Path $Data -SizeBytes ([int64]$cfg.SizeGB * 1GB) -Dynamic | Out-Null }
-    else { VBM createmedium disk --filename $Data --size ([int64]$cfg.SizeGB * 1024) --format VDI --variant Standard | Out-Null }
+foreach ($pair in @(@($Sys, 20), @($Data, $cfg.SizeGB))) {
+    if (Test-Path $pair[0]) { Remove-Item -Force $pair[0] }
+    if ($Motor -eq "hyperv") { New-VHD -Path $pair[0] -SizeBytes ([int64]$pair[1] * 1GB) -Dynamic | Out-Null }
+    else { VBM createmedium disk --filename $pair[0] --size ([int64]$pair[1] * 1024) --format VDI --variant Standard | Out-Null }
 }
 
-function New-ConfigDisk([string]$path, [string]$content) {
-    if (Test-Path $path) { Remove-Item -Force $path }
-    $ds = Join-Path $env:TEMP "backeddy-diskpart.txt"
-    @("create vdisk file=""$path"" maximum=64 type=expandable", "select vdisk file=""$path""", "attach vdisk",
-      "create partition primary", "format fs=fat32 label=BACKEDDYCFG quick", "assign") | Set-Content -Encoding ASCII $ds
-    diskpart /s $ds | Out-Null
-    Start-Sleep -Seconds 2
-    $vol = Get-Volume -FileSystemLabel BACKEDDYCFG -ErrorAction SilentlyContinue | Where-Object DriveLetter | Select-Object -First 1
-    if ($null -eq $vol) { throw "não achei o disquinho de configuração montado" }
-    [IO.File]::WriteAllText("$($vol.DriveLetter):\firstboot.env", $content, (New-Object Text.UTF8Encoding($false)))
-    @("select vdisk file=""$path""", "detach vdisk") | Set-Content -Encoding ASCII $ds
-    diskpart /s $ds | Out-Null
-    Remove-Item -Force $ds
-}
-$b64 = { param($s) [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($s)) }
-$envText = "NAME_B64=$(& $b64 $cfg.Name)`nPASSWORD_B64=$(& $b64 $cfg.Password)`nTM_PERCENT=60`nDISKS=""auto""`nBEEP_OK=0`n"
-if ($cfg.Quiet) { $envText += "QUIET_START=22`nQUIET_END=8`n" } else { $envText += "QUIET_START=`nQUIET_END=`n" }
-$CfgDisk = Join-Path $Dir "configuracao.vhd"
-try { New-ConfigDisk $CfgDisk $envText } catch { Falha "Não deu para criar o disco de configuração: $_" }
-Log "configuração: $CfgDisk"
-
+# ---------- 5. Máquina virtual ----------
 if ($Motor -eq "hyperv") {
-# ---------- 5. Rede em ponte (o Mac precisa ver o servidor na rede) ----------
-$sw = Get-VMSwitch -SwitchType External -ErrorAction SilentlyContinue | Select-Object -First 1
-if ($null -eq $sw) {
+    $sw = Get-VMSwitch -SwitchType External -ErrorAction SilentlyContinue | Select-Object -First 1
+    if ($null -eq $sw) {
+        $route = Get-NetRoute -DestinationPrefix "0.0.0.0/0" | Sort-Object RouteMetric | Select-Object -First 1
+        $nic = Get-NetAdapter -InterfaceIndex $route.ifIndex
+        Msg ("Vou criar uma rede virtual em ponte na placa ""$($nic.Name)"" (o Mac precisa ver o servidor na rede).`nA internet deste PC pode cair por alguns segundos.") | Out-Null
+        $sw = New-VMSwitch -Name "Backeddy (ponte)" -NetAdapterName $nic.Name -AllowManagementOS $true
+        Log "switch criado: $($sw.Name) em $($nic.Name)"
+    }
+    New-VM -Name $VmName -Generation 2 -MemoryStartupBytes 512MB -SwitchName $sw.Name -Path $Dir -NoVHD | Out-Null
+    Set-VMMemory $VmName -DynamicMemoryEnabled $false
+    Set-VMProcessor $VmName -Count 2
+    Set-VMFirmware $VmName -SecureBootTemplate MicrosoftUEFICertificateAuthority
+    Set-VM $VmName -AutomaticCheckpointsEnabled $false -AutomaticStartAction Start -AutomaticStopAction ShutDown -AutomaticStartDelay 30
+    Add-VMHardDiskDrive $VmName -Path $Usb
+    Add-VMHardDiskDrive $VmName -Path $Sys
+    Add-VMHardDiskDrive $VmName -Path $Data
+    Set-VMFirmware $VmName -FirstBootDevice (Get-VMHardDiskDrive $VmName | Where-Object Path -eq $Usb)
+    Start-VM $VmName
+    Start-Process vmconnect.exe -ArgumentList "localhost", "`"$VmName`""
+    $vmMac = ((Get-VMNetworkAdapter -VMName $VmName).MacAddress) -replace '(..)(?!$)', '$1-'
+} else {
     $route = Get-NetRoute -DestinationPrefix "0.0.0.0/0" | Sort-Object RouteMetric | Select-Object -First 1
     $nic = Get-NetAdapter -InterfaceIndex $route.ifIndex
-    Msg ("Vou criar uma rede virtual em ponte na placa ""$($nic.Name)"".`nA internet deste PC pode cair por alguns segundos.") | Out-Null
-    $sw = New-VMSwitch -Name "Backeddy (ponte)" -NetAdapterName $nic.Name -AllowManagementOS $true
-    Log "switch criado: $($sw.Name) em $($nic.Name)"
+    $bridge = $nic.InterfaceDescription
+    $names = (& $VBox list bridgedifs) | Where-Object { $_ -match '^Name:\s+(.+)$' } | ForEach-Object { $Matches[1].Trim() }
+    if ($names -notcontains $bridge -and $names.Count -gt 0) { $bridge = $names | Where-Object { $_ -like "*$($nic.Name)*" } | Select-Object -First 1; if (-not $bridge) { $bridge = $names[0] } }
+    VBM createvm --name $VmName --ostype Debian_64 --register --basefolder $Dir | Out-Null
+    VBM modifyvm $VmName --memory 512 --cpus 2 --firmware efi --nic1 bridged --bridgeadapter1 $bridge `
+        --graphicscontroller vmsvga --vram 16 --audio-enabled off --usbohci on --mouse usbtablet | Out-Null
+    VBM storagectl $VmName --name SATA --add sata --controller IntelAhci --portcount 3 --hostiocache on | Out-Null
+    # pendrive na porta 0 (dá a partida) e removível com a VM ligada
+    VBM storageattach $VmName --storagectl SATA --port 0 --device 0 --type hdd --medium $Usb --hotpluggable on | Out-Null
+    VBM storageattach $VmName --storagectl SATA --port 1 --device 0 --type hdd --medium $Sys | Out-Null
+    VBM storageattach $VmName --storagectl SATA --port 2 --device 0 --type hdd --medium $Data | Out-Null
+    VBM startvm $VmName --type gui | Out-Null
+    $act = New-ScheduledTaskAction -Execute $VBox -Argument "startvm `"$VmName`" --type headless"
+    $trg = @((New-ScheduledTaskTrigger -AtStartup), (New-ScheduledTaskTrigger -AtLogOn -User "$env:USERDOMAIN\$env:USERNAME"))
+    $pri = New-ScheduledTaskPrincipal -UserId "$env:USERDOMAIN\$env:USERNAME" -LogonType S4U -RunLevel Highest
+    Register-ScheduledTask -TaskName "Backeddy Server (VirtualBox)" -Action $act -Trigger $trg -Principal $pri -Force | Out-Null
+    $vmMac = ((& $VBox showvminfo $VmName --machinereadable) | Where-Object { $_ -match '^macaddress1="(.+)"' } | ForEach-Object { $Matches[1] }) -replace '(..)(?!$)', '$1-'
 }
+Log "VM criada e ligada pelo pendrive ($Motor, MAC $vmMac)"
 
-# ---------- 6. Máquina virtual ----------
-New-VM -Name $VmName -Generation 2 -MemoryStartupBytes 512MB -SwitchName $sw.Name -Path $Dir -NoVHD | Out-Null
-Set-VMMemory $VmName -DynamicMemoryEnabled $false
-Set-VMProcessor $VmName -Count 2
-Set-VMFirmware $VmName -SecureBootTemplate MicrosoftUEFICertificateAuthority
-Set-VM $VmName -AutomaticCheckpointsEnabled $false -AutomaticStartAction Start -AutomaticStopAction ShutDown -AutomaticStartDelay 30
-Add-VMHardDiskDrive $VmName -Path $Sys
-Add-VMHardDiskDrive $VmName -Path $Data
-Add-VMHardDiskDrive $VmName -Path $CfgDisk
-Set-VMFirmware $VmName -FirstBootDevice (Get-VMHardDiskDrive $VmName | Where-Object Path -eq $Sys)
-Start-VM $VmName
-Log "VM criada e ligada"
-
+# ---------- 6. Janela de acompanhamento: instalar na tela da VM e ejetar o pendrive ----------
+function Eject-Usb {
+    if ($Motor -eq "hyperv") { Get-VMHardDiskDrive $VmName | Where-Object Path -eq $Usb | Remove-VMHardDiskDrive }
+    else { VBM storageattach $VmName --storagectl SATA --port 0 --device 0 --medium none | Out-Null }
+    Log "pendrive ejetado"
 }
-else {
-# ---------- 5/6. VirtualBox: rede em ponte, VM e início automático ----------
-$route = Get-NetRoute -DestinationPrefix "0.0.0.0/0" | Sort-Object RouteMetric | Select-Object -First 1
-$nic = Get-NetAdapter -InterfaceIndex $route.ifIndex
-$bridge = $nic.InterfaceDescription
-$names = (& $VBox list bridgedifs) | Where-Object { $_ -match '^Name:\s+(.+)$' } | ForEach-Object { $Matches[1].Trim() }
-if ($names -notcontains $bridge -and $names.Count -gt 0) { $bridge = $names | Where-Object { $_ -like "*$($nic.Name)*" } | Select-Object -First 1; if (-not $bridge) { $bridge = $names[0] } }
-VBM createvm --name $VmName --ostype Debian_64 --register --basefolder $Dir | Out-Null
-VBM modifyvm $VmName --memory 512 --cpus 2 --firmware efi --nic1 bridged --bridgeadapter1 $bridge `
-    --graphicscontroller vmsvga --audio-enabled off --boot1 disk --boot2 none --boot3 none --boot4 none | Out-Null
-VBM storagectl $VmName --name SATA --add sata --controller IntelAhci --portcount 3 | Out-Null
-VBM storageattach $VmName --storagectl SATA --port 0 --device 0 --type hdd --medium $Sys | Out-Null
-VBM storageattach $VmName --storagectl SATA --port 1 --device 0 --type hdd --medium $Data | Out-Null
-VBM storageattach $VmName --storagectl SATA --port 2 --device 0 --type hdd --medium $CfgDisk | Out-Null
-VBM startvm $VmName --type headless | Out-Null
-Log "VM do VirtualBox criada e ligada (ponte: $bridge)"
-# liga junto com o Windows (e ao entrar no Windows, se não tiver ligado antes)
-$act = New-ScheduledTaskAction -Execute $VBox -Argument "startvm `"$VmName`" --type headless"
-$trg = @((New-ScheduledTaskTrigger -AtStartup), (New-ScheduledTaskTrigger -AtLogOn -User $env:USERNAME))
-$pri = New-ScheduledTaskPrincipal -UserId "$env:USERDOMAIN\$env:USERNAME" -LogonType S4U -RunLevel Highest
-Register-ScheduledTask -TaskName "Backeddy Server (VirtualBox)" -Action $act -Trigger $trg -Principal $pri -Force | Out-Null
-$vbMac = ((& $VBox showvminfo $VmName --machinereadable) | Where-Object { $_ -match '^macaddress1="(.+)"' } | ForEach-Object { $Matches[1] }) -replace '(..)(?!$)', '$1-'
-
+$w = New-Object Windows.Forms.Form
+$w.Text = "Backeddy Server"; $w.Size = New-Object Drawing.Size(500, 260); $w.StartPosition = "CenterScreen"
+$w.FormBorderStyle = "FixedDialog"; $w.MaximizeBox = $false; $w.TopMost = $true; $w.Font = New-Object Drawing.Font("Segoe UI", 10)
+$wl = New-Object Windows.Forms.Label; $wl.Location = New-Object Drawing.Point(20, 18); $wl.Size = New-Object Drawing.Size(450, 130)
+$wl.Text = "1. Faça a instalação na janela da máquina virtual (nome, senha, discos).`n`n" +
+    "2. Quando aparecer ""Pronto! Retire o pendrive"", volte aqui e clique em Ejetar pendrive. A máquina virtual reinicia sozinha.`n`n" +
+    "Esta janela fica por cima das outras para você não perder."
+$w.Controls.Add($wl)
+$be = New-Object Windows.Forms.Button; $be.Text = "Ejetar pendrive"; $be.Location = New-Object Drawing.Point(230, 170); $be.Size = New-Object Drawing.Size(130, 34)
+$bc = New-Object Windows.Forms.Button; $bc.Text = "Abrir a tela da VM"; $bc.Location = New-Object Drawing.Point(20, 170); $bc.Size = New-Object Drawing.Size(150, 34)
+$bx = New-Object Windows.Forms.Button; $bx.Text = "Cancelar"; $bx.Location = New-Object Drawing.Point(370, 170); $bx.Size = New-Object Drawing.Size(95, 34)
+$w.Controls.AddRange(@($be, $bc, $bx))
+$be.Add_Click({
+    $r = Msg "A tela da máquina virtual já mostra ""Pronto!""?" "Backeddy Server" "Question" "YesNo"
+    if ($r -eq "Yes") { try { Eject-Usb; $w.Tag = "ok"; $w.Close() } catch { Msg "Não deu para ejetar: $($_.Exception.Message)" | Out-Null } }
+})
+$bc.Add_Click({ if ($Motor -eq "hyperv") { Start-Process vmconnect.exe -ArgumentList "localhost", "`"$VmName`"" } else { & $VBox startvm $VmName --type separate 2>$null } })
+$bx.Add_Click({ $w.Tag = "cancel"; $w.Close() })
+[void]$w.ShowDialog()
+if ($w.Tag -ne "ok") {
+    Msg "Instalação interrompida. A máquina virtual ""$VmName"" continua criada; para recomeçar, apague-a e rode este instalador de novo." | Out-Null
+    exit
 }
 
 # ---------- 7. Esperar o servidor ficar pronto ----------
-$slug = ($cfg.Name.Normalize([Text.NormalizationForm]::FormD) -replace '\p{Mn}', '').ToLower() -replace '[^a-z0-9]+', '-'
-$slug = $slug.Trim('-'); if (-not $slug) { $slug = "backeddy" }
+function Find-VmIp {
+    if ($Motor -eq "hyperv") {
+        $ip = (Get-VMNetworkAdapter -VMName $VmName).IPAddresses | Where-Object { $_ -match '^\d+\.\d+\.\d+\.\d+$' } | Select-Object -First 1
+        if ($ip) { return $ip }
+    }
+    $n = Get-NetNeighbor -AddressFamily IPv4 -ErrorAction SilentlyContinue | Where-Object { $_.LinkLayerAddress -eq $vmMac.ToUpper() -and $_.State -ne "Unreachable" } | Select-Object -First 1
+    if ($n) { return $n.IPAddress }
+    # ainda não está na tabela: "chama" a rede inteira (/24) para o Windows aprender o endereço da VM
+    $myip = (Get-NetIPAddress -AddressFamily IPv4 -InterfaceIndex (Get-NetRoute -DestinationPrefix "0.0.0.0/0" | Sort-Object RouteMetric | Select-Object -First 1).ifIndex | Select-Object -First 1).IPAddress
+    if ($myip) {
+        $pre = $myip -replace '\.\d+$', ''
+        $tasks = 1..254 | ForEach-Object { (New-Object Net.NetworkInformation.Ping).SendPingAsync("$pre.$_", 300) }
+        try { [Threading.Tasks.Task]::WaitAll($tasks) } catch {}
+    }
+    return $null
+}
 $wait = New-Object Windows.Forms.Form
 $wait.Text = "Backeddy Server"; $wait.Size = New-Object Drawing.Size(460, 160); $wait.StartPosition = "CenterScreen"
 $wait.FormBorderStyle = "FixedDialog"; $wait.ControlBox = $false; $wait.Font = New-Object Drawing.Font("Segoe UI", 10)
-$wl = New-Object Windows.Forms.Label; $wl.Location = New-Object Drawing.Point(20, 20); $wl.Size = New-Object Drawing.Size(410, 80)
-$wl.Text = "Preparando o servidor (uns 5 minutos)…"; $wait.Controls.Add($wl); $wait.Show(); [Windows.Forms.Application]::DoEvents()
-$ip = $null; $ready = $false; $t0 = Get-Date
+$wl2 = New-Object Windows.Forms.Label; $wl2.Location = New-Object Drawing.Point(20, 20); $wl2.Size = New-Object Drawing.Size(410, 80)
+$wl2.Text = "Preparando o servidor (uns 5 minutos)…"; $wait.Controls.Add($wl2); $wait.Show(); [Windows.Forms.Application]::DoEvents()
+$ip = $null; $hello = $null; $t0 = Get-Date
 while (((Get-Date) - $t0).TotalMinutes -lt 20) {
-    if ($Motor -eq "hyperv") {
-        $ip = (Get-VMNetworkAdapter -VMName $VmName).IPAddresses | Where-Object { $_ -match '^\d+\.\d+\.\d+\.\d+$' } | Select-Object -First 1
-    } else {
-        # sem integração com o VirtualBox: acha o IP pela placa de rede (MAC) ou pelo nome na rede (.local)
-        $ip = (Get-NetNeighbor -AddressFamily IPv4 -ErrorAction SilentlyContinue | Where-Object { $_.LinkLayerAddress -eq $vbMac.ToUpper() } | Select-Object -First 1).IPAddress
-        if (-not $ip) { try { $ip = ([Net.Dns]::GetHostAddresses("$slug.local") | Where-Object AddressFamily -eq "InterNetwork" | Select-Object -First 1).IPAddressToString } catch {} }
-    }
     $min = [math]::Floor(((Get-Date) - $t0).TotalMinutes)
+    if (-not $ip) { $ip = Find-VmIp }
     if ($ip) {
-        $wl.Text = "Preparando o servidor (uns 5 minutos)…`nEndereço: $ip · $min min"
-        try { $r = Invoke-WebRequest -UseBasicParsing -TimeoutSec 3 "http://$ip/"; if ($r.StatusCode -eq 200) { $ready = $true; break } } catch {}
-    } else { $wl.Text = "Ligando a máquina virtual… · $min min" }
+        $wl2.Text = "Preparando o servidor (uns 5 minutos)…`nEndereço: $ip · $min min"
+        try { $hello = Invoke-RestMethod -UseBasicParsing -TimeoutSec 3 "http://$ip/api/hello"; if ($hello.slug) { break } } catch {}
+    } else { $wl2.Text = "Preparando o servidor (uns 5 minutos)… · $min min" }
     [Windows.Forms.Application]::DoEvents(); Start-Sleep -Seconds 5
 }
 $wait.Close()
-Log "pronto=$ready ip=$ip"
+$ready = $null -ne $hello -and $hello.slug
+Log "pronto=$ready ip=$ip nome=$($hello.name)"
 
 # ---------- 8. Vigia no Windows: bipa e avisa quando a VM tiver alerta (a VM não tem alto-falante) ----------
-try {
-    $vsrc = Join-Path $PSScriptRoot "Backeddy-Vigia.ps1"
-    if (-not (Test-Path $vsrc)) { $vsrc = Join-Path $Base "Backeddy-Vigia.ps1" }
-    $vdst = Join-Path $Base "Backeddy-Vigia.ps1"
-    if ($vsrc -ne $vdst) { Copy-Item -Force $vsrc $vdst }
-    @{ host = "$slug.local"; ip = "$ip" } | ConvertTo-Json | Set-Content -Encoding UTF8 (Join-Path $Base "vigia.json")
-    $va = New-ScheduledTaskAction -Execute "powershell.exe" -Argument "-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File `"$vdst`""
-    $vt = New-ScheduledTaskTrigger -AtLogOn -User "$env:USERDOMAIN\$env:USERNAME"
-    $vp = New-ScheduledTaskPrincipal -UserId "$env:USERDOMAIN\$env:USERNAME" -LogonType Interactive -RunLevel Limited
-    $vs = New-ScheduledTaskSettingsSet -ExecutionTimeLimit ([TimeSpan]::Zero) -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries
-    Register-ScheduledTask -TaskName "Backeddy Vigia" -Action $va -Trigger $vt -Principal $vp -Settings $vs -Force | Out-Null
-    Start-ScheduledTask -TaskName "Backeddy Vigia"
-    Log "vigia instalado"
-} catch { Log "vigia: $_" }
 if ($ready) {
-    Msg ("Pronto! ""$($cfg.Name)"" está funcionando.`n`n" +
-        "Mac: Ajustes do Sistema › Geral › Time Machine › ""$($cfg.Name)"" (usuário: backeddy)`n" +
-        "Painel: http://$slug.local (ou http://$ip)`n" +
-        "Acesso: ssh admin@$slug.local`n`nA máquina virtual liga sozinha junto com o Windows.`n" +
+    try {
+        $vsrc = Join-Path $PSScriptRoot "Backeddy-Vigia.ps1"
+        if (-not (Test-Path $vsrc)) { $vsrc = Join-Path $Base "Backeddy-Vigia.ps1" }
+        $vdst = Join-Path $Base "Backeddy-Vigia.ps1"
+        if ($vsrc -ne $vdst) { Copy-Item -Force $vsrc $vdst }
+        @{ host = "$($hello.slug).local"; ip = "$ip" } | ConvertTo-Json | Set-Content -Encoding UTF8 (Join-Path $Base "vigia.json")
+        $va = New-ScheduledTaskAction -Execute "powershell.exe" -Argument "-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File `"$vdst`""
+        $vt = New-ScheduledTaskTrigger -AtLogOn -User "$env:USERDOMAIN\$env:USERNAME"
+        $vp = New-ScheduledTaskPrincipal -UserId "$env:USERDOMAIN\$env:USERNAME" -LogonType Interactive -RunLevel Limited
+        $vs = New-ScheduledTaskSettingsSet -ExecutionTimeLimit ([TimeSpan]::Zero) -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries
+        Register-ScheduledTask -TaskName "Backeddy Vigia" -Action $va -Trigger $vt -Principal $vp -Settings $vs -Force | Out-Null
+        Start-ScheduledTask -TaskName "Backeddy Vigia"
+        Log "vigia instalado"
+    } catch { Log "vigia: $_" }
+    Remove-Item -Force $Usb -ErrorAction SilentlyContinue   # o pendrive virtual não é mais necessário
+    Msg ("Pronto! ""$($hello.name)"" está funcionando.`n`n" +
+        "Mac: Ajustes do Sistema › Geral › Time Machine › ""$($hello.name)"" (usuário: backeddy)`n" +
+        "Painel: http://$($hello.slug).local (ou http://$ip)`n" +
+        "Acesso: ssh admin@$($hello.slug).local`n`n" +
+        "A máquina virtual liga sozinha junto com o Windows.`n" +
         "Se algo der errado, este Windows bipa e mostra um aviso (ícone do escudo, perto do relógio).") | Out-Null
     Start-Process "http://$ip/"
 } else {
-    Msg ("A máquina virtual foi criada, mas o servidor ainda não respondeu.`n" +
-        "Abra o Gerenciador do Hyper-V ou o VirtualBox, conecte em ""$VmName"" e veja a tela.`n`nDetalhes em: $Log") "Backeddy Server" "Warning" | Out-Null
+    Msg ("A máquina virtual foi instalada, mas o servidor ainda não respondeu aqui.`n" +
+        "Veja a tela da máquina virtual: ela mostra o endereço quando termina.`n`nDetalhes em: $Log") "Backeddy Server" "Warning" | Out-Null
 }

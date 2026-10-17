@@ -1,40 +1,38 @@
-# Testando o Backeddy em VM no Windows (0.6)
+# Testando o Backeddy em VM no Windows (0.6.1)
 
-Para quem já tem um PC/servidor com Windows ligado o tempo todo: o instalador cria uma máquina
-virtual pronta. Nada é formatado.
+Para quem já tem um PC/servidor com Windows ligado o tempo todo. O instalador cria uma máquina
+virtual que dá partida pelo "pendrive virtual" (a mesma imagem do pendrive de verdade). A instalação
+é a mesma do pendrive, na tela da VM. Nada no Windows é formatado.
 
 ## 1. Preparar
 
-1. Rode o workflow **Imagem do pendrive** (ou publique uma tag `v0.6.0`).
-2. Baixe o artefato `backeddy-server-imagem` e descompacte. Vão aparecer, entre outros:
-   `backeddy-server-0.6.0-vm.vhdx` (Hyper-V) e `backeddy-server-0.6.0-vm.vdi` (VirtualBox).
-3. Copie a pasta `windows/` do repositório para o PC com Windows (ou baixe o repositório em .zip).
+1. Rode o workflow **Imagem do pendrive** e baixe o artefato `backeddy-server-imagem`.
+   Vêm o `backeddy-server-0.6.1.vhdx` (Hyper-V) e o `backeddy-server-0.6.1.vdi` (VirtualBox).
+2. Baixe o repositório (github.com/BackEddy/server › Code › Download ZIP) e descompacte.
 
 ## 2. Instalar
 
-Clique duas vezes em **`Instalar Backeddy.cmd`** e aceite o pedido de administrador.
+Rode `windows\Instalar Backeddy.cmd -Imagem caminho\backeddy-server-0.6.1.vhdx` (ou só clique duas
+vezes no .cmd e escolha o arquivo quando ele pedir).
 
-- [ ] Se a virtualização estiver desligada na BIOS, ele explica o que ligar e para
-- [ ] Hyper-V desligado: pergunta se liga (reinicia uma vez e continua sozinho) ou usa o VirtualBox
-- [ ] Janela única: nome, senha 2x, unidade com espaço livre, tamanho sugerido, silêncio à noite
-- [ ] Sem release publicada, pede o arquivo `…-vm.vhdx` (ou `.vdi`): escolha o que você baixou
-- [ ] Sem switch externo, avisa e cria uma ponte (a internet pisca)
-- [ ] "Preparando o servidor…" mostra o IP e, em ~5 minutos, "Pronto!" e abre o painel
-
-Atenção no PC do Eddy: já existe outra VM com o nome do servidor? Use um nome diferente no teste
-(ex.: "Backup Teste") para não confundir com a "TimeMachine" de verdade.
+- [ ] Checa a BIOS e o Hyper-V (liga com 1 reinício, ou usa o VirtualBox)
+- [ ] Janela pequena: só a unidade e o tamanho do disco de backup (mínimo 40 GB)
+- [ ] A VM liga e a tela dela abre sozinha no instalador gráfico (mouse funciona)
+- [ ] No instalador: cartão **"Disco de backup da máquina virtual"** (verde, sem aviso de risco),
+      APAGAR, nome, senha, **silêncio à noite** (sem teste de bipe: quem bipa é o Windows)
+- [ ] Na tela "Pronto!", clicar em **Ejetar pendrive** na janelinha do Windows → a VM reinicia sozinha
+- [ ] "Preparando o servidor…" mostra o endereço e, em ~5 minutos, "Pronto!" com o nome e abre o painel
+- [ ] Ícone do escudo perto do relógio: "Backeddy: tudo certo"
 
 ## 3. Conferir
 
-- [ ] Painel abre em `http://nome.local` com a senha; "Tudo certo"
-- [ ] No Mac, o servidor aparece no Time Machine
-- [ ] Ícone do escudo perto do relógio do Windows: "Backeddy: tudo certo"
+- [ ] No Mac, o servidor aparece no Time Machine; `ssh admin@nome.local` entra
 - [ ] Reinicie o Windows: a VM volta sozinha e o escudo também
-- [ ] Alerta de teste: entre por SSH e rode `sudo systemctl stop smbd`; em até ~2 minutos o Windows
-      bipa e mostra o aviso; no painel, "Amanhã" reconhece; depois `sudo systemctl start smbd`
+- [ ] Alerta de teste: por SSH, `sudo systemctl stop smbd`; em ~2 minutos o Windows bipa e avisa;
+      no painel, "Amanhã" reconhece; depois `sudo systemctl start smbd`
 
 ## Desfazer
 
 Hyper-V: `Stop-VM "Backeddy Server" -TurnOff; Remove-VM "Backeddy Server" -Force` e apague a pasta
-`X:\Backeddy`. VirtualBox: apague a VM no VirtualBox e a tarefa "Backeddy Server (VirtualBox)".
+`X:\Backeddy`. VirtualBox: apague a VM e a tarefa "Backeddy Server (VirtualBox)".
 Vigia: apague a tarefa "Backeddy Vigia" e a pasta `C:\ProgramData\Backeddy`.

@@ -40,7 +40,8 @@ func serveWeb(addr string) {
 		_, _ = w.Write(indexHTML)
 	})
 	mux.HandleFunc("/api/login", apiLogin)
-	mux.HandleFunc("/api/beep", apiBeep) // sem senha: só diz se é hora de bipar (vigia do Windows)
+	mux.HandleFunc("/api/beep", apiBeep)   // sem senha: só diz se é hora de bipar (vigia do Windows)
+	mux.HandleFunc("/api/hello", apiHello) // sem senha: nome do servidor (o mesmo que o Bonjour já anuncia)
 	mux.HandleFunc("/api/status", auth(apiStatus))
 	mux.HandleFunc("/api/ack", auth(apiAck))
 	mux.HandleFunc("/api/quiet", auth(apiQuiet))
@@ -174,6 +175,20 @@ func apiStatus(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(statusResp{Name: name, Alerts: p, Status: string(out), QuietStart: qs, QuietEnd: qe})
+}
+
+// apiHello: o instalador do Windows descobre o nome do servidor recém-instalado.
+func apiHello(w http.ResponseWriter, r *http.Request) {
+	conf := map[string]string{}
+	if data, err := os.ReadFile("/etc/backeddy/server.conf"); err == nil {
+		for _, l := range strings.Split(string(data), "\n") {
+			if k, v, ok := strings.Cut(l, "="); ok {
+				conf[k] = strings.Trim(v, `"`)
+			}
+		}
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]string{"name": conf["NAME"], "slug": conf["SLUG"], "version": conf["VERSION"]})
 }
 
 // apiBeep: o vigia do Windows (VM sem alto-falante) pergunta a cada minuto se deve bipar.

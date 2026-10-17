@@ -174,6 +174,17 @@ via QR); x86 64 bits apenas (Debian 13 sem i386; Kopia sem binário 32 bits).
 - Decisões: descartado "Faça tudo por mim"; teste de backup real e de hardware com um amigo que já tem
   servidor Windows (usa o instalador de VM).
 
+### 0.6.1 — VM no Windows pelo "pendrive virtual" (17/10/2026)
+- Teste da 0.6.0 no Hyper-V: a VM com imagem pronta configurou o servidor (o Mac achou), mas o 1º boot
+  não terminou (causa não vista: o registro foi sobrescrito no reinício), o SSH ficou fora (sem chaves no
+  boot → start-limit) e o Windows não recebeu o IP (KVP). Ideia do Eddy, adotada: a VM dá partida pelo
+  pendrive virtual (mesmo instalador gráfico já testado) e uma janelinha no Windows tem "Ejetar pendrive"
+  (Hyper-V: Remove-VMHardDiskDrive com a VM ligada; VirtualBox: porta SATA hotpluggable + medium none).
+- Saiu a imagem pronta de VM e o disquinho de configuração; o CI gera o pendrive também em .vdi.
+- Instalador gráfico reconhece VM (DMI): cartão verde "Disco de backup da máquina virtual" e sem teste de
+  bipe (pergunta só o silêncio à noite). /api/hello (sem senha) devolve nome/slug para o Windows.
+- O Windows acha a VM pelo IP do Hyper-V ou pelo MAC na tabela ARP (com "ping" na rede /24).
+
 ### Plano de construção
 | Fase | Conteúdo | Situação |
 | --- | --- | --- |

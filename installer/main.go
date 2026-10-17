@@ -390,6 +390,10 @@ func confirmErase(ui Frontend, l *Layout) bool {
 
 // askAlarm: o servidor bipa quando algo dá errado. Testa se o PC tem alto-falante e pergunta o silêncio à noite.
 func askAlarm(ui Frontend, dry bool) (bool, int, int) {
+	if InVM {
+		// máquina virtual não tem alto-falante: quem bipa é o Windows (vigia na bandeja)
+		return askQuiet(ui, "O Windows vai bipar se algo der errado no servidor. Para um alerta de madrugada não acordar a casa:")
+	}
 	beepOK := false
 	for {
 		if !dry {
@@ -414,7 +418,11 @@ func askAlarm(ui Frontend, dry bool) (bool, int, int) {
 		}, []string{"Entendi"}, 0, nil)
 		return false, 22, 8
 	}
-	c, _ := ui.Cards("Silêncio à noite", []string{"Para um alerta de madrugada não acordar a casa. Dá para mudar depois no painel."}, []Card{
+	return askQuiet(ui, "Para um alerta de madrugada não acordar a casa. Dá para mudar depois no painel.")
+}
+
+func askQuiet(ui Frontend, intro string) (bool, int, int) {
+	c, _ := ui.Cards("Silêncio à noite", []string{intro}, []Card{
 		{Title: "Sem bipe das 22h às 8h", Desc: "Durante a noite o aviso espera; o bipe volta de manhã.", Plain: true, Recommended: true},
 		{Title: "Sem bipe das 23h às 7h", Desc: "Uma noite um pouco mais curta.", Plain: true},
 		{Title: "Bipar a qualquer hora", Desc: "Para quem prefere saber na hora, mesmo de madrugada.", Plain: true},

@@ -6,6 +6,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"os"
 	"os/exec"
 	"sort"
 	"strings"
@@ -370,6 +371,22 @@ func (l *Layout) AllDisks() []Disk {
 	return out
 }
 
+// InVM: o instalador está rodando numa máquina virtual (o disco de backup é um arquivo do Windows).
+var InVM = detectVM()
+
+func detectVM() bool {
+	for _, f := range []string{"/sys/class/dmi/id/sys_vendor", "/sys/class/dmi/id/product_name"} {
+		b, _ := os.ReadFile(f)
+		v := strings.ToLower(string(b))
+		for _, k := range []string{"microsoft corporation", "innotek", "virtualbox", "qemu", "vmware", "virtual machine"} {
+			if strings.Contains(v, k) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 // Options calcula os modos possíveis; o primeiro é o recomendado.
 // Discos com defeito (SMART) ficam de fora dos modos automáticos (só no Manual).
 func Options(all []Disk) ([]*Layout, []string, error) {
@@ -452,7 +469,11 @@ func Options(all []Disk) ([]*Layout, []string, error) {
 		protected.Title, protected.Desc = "Protegido", "Cada arquivo fica em 2 discos. Se um disco morrer, nada se perde."
 		opts = append(opts, protected)
 	}
-	if len(space.Data) == 1 {
+	if len(space.Data) == 1 && InVM {
+		// numa VM o "disco" é um arquivo do Windows: a proteção é a dos discos do Windows
+		space.Title, space.Desc = "Disco de backup da máquina virtual", "A proteção contra disco quebrado fica por conta dos discos do Windows (RAID, Espaços de Armazenamento)."
+		space.Risk = RiskGreen
+	} else if len(space.Data) == 1 {
 		space.Title, space.Desc = "Um disco de backup", "Backups num disco só. Se ele morrer, você perde o histórico de backups."
 	} else {
 		space.Title, space.Desc = "Mais espaço", "Soma os discos de backup. Se um morrer, você perde o histórico de backups."
