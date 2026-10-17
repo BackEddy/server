@@ -43,9 +43,12 @@ die()  { printf '\n\033[1;31m✗ %s\033[0m\n' "$*" >&2; exit 1; }
 sedesc() { printf '%s' "$1" | sed -e 's/[\\&]/\\&/g' -e 's/|/-/g'; }
 
 [ "$(id -u)" = 0 ] || die "Rode como root:  sudo ./install.sh"
-. /etc/os-release
-[ "${ID:-}" = debian ] || die "Este script é para Debian (encontrado: ${PRETTY_NAME:-desconhecido})."
-case "${VERSION_ID:-}" in 12|13) ;; *) echo "Aviso: testado no Debian 12 e 13 (este é ${VERSION_ID:-?})." ;; esac
+# lê o os-release num subshell: ele define NAME e VERSION, que sobrescreveriam as nossas variáveis
+OS_ID=$(. /etc/os-release; echo "${ID:-}")
+OS_VER=$(. /etc/os-release; echo "${VERSION_ID:-}")
+OS_PRETTY=$(. /etc/os-release; echo "${PRETTY_NAME:-desconhecido}")
+[ "$OS_ID" = debian ] || die "Este script é para Debian (encontrado: $OS_PRETTY)."
+case "$OS_VER" in 12|13) ;; *) echo "Aviso: testado no Debian 12 e 13 (este é ${OS_VER:-?})." ;; esac
 
 printf '\n\033[1m🌀 Backeddy Server %s\033[0m\n' "$VERSION"
 
@@ -164,7 +167,10 @@ if [ ! -f "$KCONF/repository.config" ]; then
     kopia repository create filesystem --path "$DATA/kopia" >/dev/null
   fi
 fi
-if [ ! -f "$KCONF/tls.cert" ]; then
+# a manutenção automática do Kopia pertence a usuario@maquina; acompanha o nome atual
+kopia maintenance set --owner=me >/dev/null 2>&1 || true
+# certificado novo se ainda não existe ou se o nome do servidor mudou
+if [ ! -f "$KCONF/tls.cert" ] || ! openssl x509 -in "$KCONF/tls.cert" -noout -subject 2>/dev/null | grep -q "CN *= *$SLUG.local"; then
   openssl req -x509 -newkey rsa:3072 -nodes -days 3650 -subj "/CN=$SLUG.local" \
     -addext "subjectAltName=DNS:$SLUG.local,DNS:$SLUG" \
     -keyout "$KCONF/tls.key" -out "$KCONF/tls.cert" >/dev/null 2>&1
