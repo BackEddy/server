@@ -1,5 +1,9 @@
 # Testando os discos do Backeddy Server (espelho, defeito e troca)
 
+> Rodado com sucesso em 16/10/2026 (0.2.0). Bugs encontrados e corrigidos na 0.2.1: cache do Kopia
+> contaminando um repositório novo, `backeddy status` quebrando sem discos montados, limite do
+> Time Machine calculado pelo `df` em vez do espaço útil do espelho.
+
 Usa a mesma VM do [TESTING.pt-BR.md](TESTING.pt-BR.md), com discos virtuais pequenos
 (nada de backup grande). Ordem dos testes:
 
@@ -11,13 +15,22 @@ Usa a mesma VM do [TESTING.pt-BR.md](TESTING.pt-BR.md), com discos virtuais pequ
 | 3 | Troca do disco | `backeddy replace-disk` reconstrói o espelho; status volta ao verde |
 
 Sempre confira os nomes com `lsblk` antes de rodar comandos que apagam discos:
-eles podem mudar quando discos entram ou saem.
+eles **mudam** quando discos entram ou saem (no teste real, o disco do sistema virou `sdb`).
+
+Antes de começar, garanta que não há checkpoints (eles trocam os caminhos dos discos por `.avhdx`):
+```powershell
+Set-VM Backeddy-Server -AutomaticCheckpointsEnabled $false
+Get-VMCheckpoint Backeddy-Server | Remove-VMCheckpoint
+```
+Para tirar um disco da VM, use a **posição** mostrada por
+`Get-VMHardDiskDrive Backeddy-Server | Format-Table ControllerLocation, Path` e
+`Remove-VMHardDiskDrive -VMName Backeddy-Server -ControllerType SCSI -ControllerNumber 0 -ControllerLocation N`.
 
 ## 0. Atualizar a VM para a 0.2 e testar a reinicialização
 
-No Mac:
+No Mac (sobrescreve a cópia da VM no lugar certo; avisos de "unknown extended header" podem ser ignorados):
 ```bash
-scp -rp ~/backeddy-server eddy@192.168.0.67:
+tar -C ~ -czf - backeddy-server | ssh eddy@192.168.0.67 tar -xzf -
 ```
 Na VM, como root:
 ```bash
@@ -70,7 +83,8 @@ A VM demora um pouco mais para ligar (espera ~30 s pelo disco que sumiu). Na VM:
 ```bash
 backeddy status
 ```
-- [ ] Os serviços ficam 🟢 (o servidor continua funcionando)
+- [ ] Os serviços ficam 🟢 (o servidor continua funcionando). Logo após ligar, podem aparecer como
+      ⏳ "aguardando os discos" por até ~40 s: é o servidor esperando o disco que sumiu.
 - [ ] Aparece 🔴 "Espelho DEGRADADO: falta um disco"
 - [ ] `journalctl -t backeddy` mostra o aviso de modo degradado
 

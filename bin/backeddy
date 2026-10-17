@@ -13,7 +13,14 @@ kenv() {
   export KOPIA_CONFIG_PATH="$KCONF/repository.config" KOPIA_CACHE_DIRECTORY=/var/cache/backeddy-kopia KOPIA_LOG_DIR=/var/log/backeddy-kopia
   export KOPIA_PASSWORD; KOPIA_PASSWORD=$(cat "$KCONF/repo-password")
 }
-svc() { systemctl is-active --quiet "$1" && echo "🟢 $2" || echo "🔴 $2 (parado: sudo systemctl status $1)"; }
+svc() {
+  case "$(systemctl is-active "$1" 2>/dev/null)" in
+    active) echo "🟢 $2" ;;
+    activating) echo "⏳ $2 (aguardando os discos de backup…)" ;;
+    *) echo "🔴 $2 (parado: sudo systemctl status $1)" ;;
+  esac
+}
+human() { numfmt --to=iec --suffix=B "$1" 2>/dev/null || echo "$1"; }
 
 case "${1:-status}" in
   status)
@@ -42,17 +49,30 @@ case "${1:-status}" in
         echo "🔴 Discos de backup NÃO montados: backups parados (veja: journalctl -t backeddy)"
       fi
     fi
-    echo
-    df -h "$DATA" | awk 'NR==2{printf "💾 Disco: %s usados de %s (%s livres, %s)\n",$3,$2,$4,$5}'
-    TM=$(du -sh "$DATA/timemachine" 2>/dev/null | cut -f1); echo "   Time Machine: ${TM:-0}"
-    KP=$(du -sh "$DATA/kopia" 2>/dev/null | cut -f1); echo "   PCs (Kopia): ${KP:-0}"
+    if [ "$(systemctl is-active backeddy-mount 2>/dev/null)" = activating ]; then
+      echo "⏳ Montando os discos de backup (até ~40 s se algum disco estiver faltando)…"
+    fi
+    if [ ! -f "$ETC/disks.conf" ] || mountpoint -q "$DATA"; then
+      echo
+      if [ "$(findmnt -no FSTYPE "$DATA" 2>/dev/null)" = btrfs ]; then
+        read -r USED FREE < <(btrfs filesystem usage -b "$DATA" 2>/dev/null | awk '
+          /^Data,/ { if (match($0, /Used:[0-9]+/)) u += substr($0, RSTART + 5, RLENGTH - 5) }
+          /Free \(estimated\):/ { f = $3 }
+          END { print u + 0, f + 0 }')
+        echo "💾 Espaço útil: $(human "$USED") usados · $(human "$FREE") livres"
+      else
+        df -h "$DATA" | awk 'NR==2{printf "💾 Disco: %s usados de %s (%s livres, %s)\n",$3,$2,$4,$5}'
+      fi
+      TM=$(du -sh "$DATA/timemachine" 2>/dev/null | cut -f1 || true); echo "   Time Machine: ${TM:-0}"
+      KP=$(du -sh "$DATA/kopia" 2>/dev/null | cut -f1 || true); echo "   PCs (Kopia): ${KP:-0}"
+    fi
     echo
     for d in $(lsblk -dno NAME,TYPE | awk '$2=="disk"{print $1}'); do
       H=$(smartctl -H "/dev/$d" 2>/dev/null | awk -F: '/overall-health|SMART Health Status/{gsub(/^ +/,"",$2);print $2}')
       case "$H" in PASSED|OK) echo "🟢 /dev/$d saudável" ;; "") echo "⚪ /dev/$d sem SMART (normal em máquina virtual)" ;; *) echo "🔴 /dev/$d: $H — troque este disco!" ;; esac
     done
     echo
-    echo "🔐 Impressão digital do certificado (PCs): $(cat "$KCONF/fingerprint")"
+    [ -f "$KCONF/fingerprint" ] && echo "🔐 Impressão digital do certificado (PCs): $(cat "$KCONF/fingerprint")"
     ;;
   add-pc)
     PC="${2:-}"; [ -n "$PC" ] || { echo "Use: sudo backeddy add-pc NOME-DO-PC"; exit 1; }

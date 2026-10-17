@@ -1,7 +1,7 @@
 # Contexto do projeto Backeddy
 
 > Arquivo de memória do projeto: tudo o que foi decidido e feito nas conversas com o Claude.
-> Leia antes de continuar o trabalho. Atualizado em 16/10/2026 (noite).
+> Leia antes de continuar o trabalho. Atualizado em 16/10/2026 (23h40).
 
 ## Como trabalhamos (combinado com o Eddy)
 
@@ -25,7 +25,7 @@ Créditos: Eddy Antonini — eddyantonini.com.br.
 | Produto | Repositório | Situação |
 | --- | --- | --- |
 | Backeddy for Mac (ex-Force TM) | BackEddy/mac | 2.0.0 publicada, notarizada |
-| Backeddy Server | BackEddy/server | 0.2 (script) em teste |
+| Backeddy Server | BackEddy/server | 0.2.1 (script), discos testados |
 | Backeddy for Windows | (BackEddy/windows, futuro) | Especificado, não iniciado |
 
 ## Backeddy for Mac (ex-Force TM)
@@ -64,7 +64,7 @@ computadores, nome, idioma, fuso, Wi-Fi criptografado opcional) com verde/amarel
 (vermelho com duas barreiras: tela com números + digitar CONTINUAR); perguntas na tela do PC (celular depois,
 via QR); x86 64 bits apenas (Debian 13 sem i386; Kopia sem binário 32 bits).
 
-### Estado técnico (0.2, em ~/backeddy-server)
+### Estado técnico (0.2.1, em ~/backeddy-server)
 - `install.sh`: Debian 12/13 limpo → Samba afinado para Time Machine (vfs fruit, durable handles),
   Avahi (`_adisk`, aparece sozinho no Mac), Kopia Server porta 51515 (TLS próprio, sem UI, usuário por PC),
   btrfs, nunca dorme, atualizações automáticas, smartd. Idempotente.
@@ -83,13 +83,30 @@ via QR); x86 64 bits apenas (Debian 13 sem i386; Kopia sem binário 32 bits).
 - Bug corrigido: `/etc/os-release` sobrescrevia NAME/VERSION (servidor saiu "Debian GNU/Linux");
   agora lido em subshell; Kopia maintenance owner e certificado acompanham renomeações.
 - Eddy optou por **não fazer backup de teste** agora ("na cega", testa depois).
-- Próximo: copiar a 0.2 para a VM e seguir `docs/TESTING-discos.pt-BR.md` (inclui teste de reboot).
+- **Testes de disco (0.2.0) concluídos com sucesso**: atualização + reboot; espelho 20 GB + 30 GB (aviso de
+  tamanhos diferentes); disco removido → servidor sobe degradado (~30–40 s a mais) e avisa; disco novo de
+  30 GB com `backeddy replace-disk` → espelho reconstruído; reboot final tudo verde; scrub sem erros.
+- Bugs achados e corrigidos na 0.2.1:
+  1. Cache do Kopia (`/var/cache/backeddy-kopia`, inclusive o blob de formato guardado por 15 min) de um
+     repositório antigo fez o servidor gravar blobs com a chave errada no repositório novo
+     ("cipher: message authentication failed"). Agora o cache é apagado sempre que um repositório é criado
+     ou conectado. Na VM foi resolvido recriando o repositório (estava vazio).
+  2. `backeddy status` quebrava (set -e + du) e mostrava o disco do sistema quando os discos não estavam montados.
+  3. Status mostra ⏳ "aguardando os discos" enquanto o boot espera um disco que sumiu.
+  4. Limite do Time Machine agora usa o espaço útil do btrfs (dados + livre estimado), não o `df`.
+  5. Roteiros: cópia para a VM com `tar … | ssh` (o `scp -r` cria pasta dentro de pasta e erra no .git);
+     PowerShell de criação com checkpoints automáticos desligados (o Hyper-V do Windows 11 cria checkpoints
+     e os discos viram `.avhdx`, o que também quebrou o filtro por caminho); remover discos pela posição.
+- Estado atual da VM: espelho com disco-a (20 GB) + disco-c (30 GB); `backups.vhdx` (1 TB) desanexado, ainda
+  no B:; checkpoints automáticos desligados. A VM antiga "TimeMachine" pode ter o mesmo problema de checkpoints
+  (verificar `Get-VMCheckpoint TimeMachine`).
+- Próximo: publicar a 0.2.1; depois fase 2 (instalador em Go + imagem do pendrive) ou fase 3 (alertas).
 
 ### Plano de construção
 | Fase | Conteúdo | Situação |
 | --- | --- | --- |
 | 0 | Repo BackEddy/server e forma de publicar | Feita |
-| 1 | Script do servidor + VM | Feita (0.1); 0.2 discos em teste |
+| 1 | Script do servidor + VM | Feita (0.1); 0.2/0.2.1 discos testados |
 | 2 | Instalador em Go + imagem do pendrive (.img com partição gravável do plano) | A fazer |
 | 3 | Painel (monitor + web), **alertas**, arquivo de plano, divisão de espaço | A fazer |
 | 4 | GitHub Actions: mmdebstrap/live-build, testes QEMU, assinatura, Releases | A fazer |
@@ -100,7 +117,7 @@ Requisitos: x86 64 bits; 512 MB–1 GB (recomendado 2 GB); sistema 16 GB; rede G
 HDs CMR (evitar SMR); notebook é ótimo (8–15 W, bateria = nobreak).
 
 ## Pendências gerais
-- Testes de disco da 0.2 na VM; depois teste real de backup do Time Machine e de um PC no Kopia.
+- Teste real de backup do Time Machine e de um PC no Kopia (ainda não feitos, por opção).
 - Alertas do servidor (lacuna conhecida).
 - Ícone/screenshot Backeddy; redirecionamento de backeddy.com.br; GitHub Sponsors (aguardando).
 - Divulgação planejada: r/macapps (precisa de 10 karma local, formato PCP, prefixo [OS], site com

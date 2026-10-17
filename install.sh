@@ -19,7 +19,7 @@
 # Pode ser rodado de novo com segurança: reaplica as configurações.
 set -euo pipefail
 
-VERSION="0.2.0"
+VERSION="0.2.1"
 NAME="Backup da Casa"
 DISKS=()
 MIRROR=1
@@ -130,7 +130,8 @@ if [ "${#DISKS[@]}" -gt 0 ]; then
     mkdir -p "$DATA"
     # sem os discos montados, nada pode ser gravado por engano no disco do sistema
     chattr +i "$DATA" 2>/dev/null || true
-    rm -rf "$ETC/kopia/repository.config" "$ETC/kopia/repository.config.kopia-password"
+    # repositório novo nos discos novos: config e cache do antigo não podem sobrar
+    rm -rf "$ETC/kopia/repository.config" "$ETC/kopia/repository.config.kopia-password" /var/cache/backeddy-kopia
     ok "Discos formatados (btrfs)"
   fi
 
@@ -189,8 +190,19 @@ smbpasswd -e backeddy >/dev/null
 ok "Usuário \"backeddy\" e pastas em $DATA"
 
 # ---------- Samba (Time Machine) ----------
-TOTAL_KB=$(df -Pk "$DATA" | awk 'NR==2{print $2}')
-TM_MAX_GB=$(( TOTAL_KB * TM_PERCENT / 100 / 1024 / 1024 ))
+# espaço útil real: no btrfs (com espelho) o df engana; usa dados gravados + livre estimado
+usable_bytes() {
+  if [ "$(findmnt -no FSTYPE "$DATA" 2>/dev/null)" = btrfs ]; then
+    btrfs filesystem usage -b "$DATA" 2>/dev/null | awk '
+      /^Data,/ { if (match($0, /Used:[0-9]+/)) used += substr($0, RSTART + 5, RLENGTH - 5) }
+      /Free \(estimated\):/ { free = $3 }
+      END { print used + free }'
+  else
+    df -Pk "$DATA" | awk 'NR==2 {print $2 * 1024}'
+  fi
+}
+USABLE_B=$(usable_bytes); [ -n "$USABLE_B" ] && [ "$USABLE_B" -gt 0 ] || USABLE_B=$(df -Pk "$DATA" | awk 'NR==2 {print $2 * 1024}')
+TM_MAX_GB=$(( USABLE_B * TM_PERCENT / 100 / 1024 / 1024 / 1024 ))
 [ "$TM_MAX_GB" -lt 1 ] && TM_MAX_GB=1
 [ -f /etc/samba/smb.conf ] && [ ! -f /etc/samba/smb.conf.original ] && cp /etc/samba/smb.conf /etc/samba/smb.conf.original
 sed -e "s|@NAME@|$(sedesc "$NAME")|g" -e "s|@DATA@|$DATA|g" -e "s|@TM_MAX@|${TM_MAX_GB}G|g" \
@@ -199,7 +211,7 @@ testparm -s /etc/samba/smb.conf >/dev/null 2>&1 || die "Configuração do Samba 
 systemctl enable --now smbd >/dev/null 2>&1
 systemctl restart smbd
 systemctl disable --now nmbd >/dev/null 2>&1 || true
-ok "Compartilhamento Time Machine (limite ${TM_MAX_GB} GB = ${TM_PERCENT}% do disco)"
+ok "Compartilhamento Time Machine (limite ${TM_MAX_GB} GB = ${TM_PERCENT}% do espaço útil)"
 
 # ---------- Avahi (aparecer sozinho no Mac) ----------
 XNAME=$(printf '%s' "$NAME" | sed -e 's/&/\&amp;/g' -e 's/</\&lt;/g' -e 's/>/\&gt;/g')
@@ -220,6 +232,9 @@ umask 022
 export KOPIA_PASSWORD; KOPIA_PASSWORD=$(cat "$KCONF/repo-password")
 export KOPIA_CONFIG_PATH="$KCONF/repository.config" KOPIA_CACHE_DIRECTORY=/var/cache/backeddy-kopia KOPIA_LOG_DIR=/var/log/backeddy-kopia
 if [ ! -f "$KCONF/repository.config" ]; then
+  # cache de outro repositório (mesmo de minutos atrás) faria o Kopia gravar com a chave errada
+  systemctl stop backeddy-kopia >/dev/null 2>&1 || true
+  rm -rf /var/cache/backeddy-kopia
   if [ -f "$DATA/kopia/kopia.repository.f" ]; then
     kopia repository connect filesystem --path "$DATA/kopia" >/dev/null
   else
