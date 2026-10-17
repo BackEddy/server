@@ -5,20 +5,24 @@
 # Uso (como root):
 #   ./install.sh                                  # pergunta nome e senha
 #   ./install.sh --name "Backup da Casa" --disk /dev/sdb
+#   ./install.sh --disk /dev/sdb --disk /dev/sdc      # dois discos espelhados
 #
 # Opções:
 #   --name  "Nome"     Nome do servidor como aparece no Mac (padrão: "Backup da Casa")
 #   --disk  /dev/sdX   Disco dedicado aos backups. SERÁ APAGADO (pede confirmação).
+#                      Repita para usar vários discos: com 2 ou mais, eles são ESPELHADOS.
 #                      Sem --disk, os backups ficam em /srv/backeddy no disco do sistema.
+#   --no-mirror        Soma os discos em vez de espelhar (mais espaço, SEM proteção)
 #   --tm-percent N     % do espaço reservado ao Time Machine (padrão: 60)
 #   --yes              Não pergunta nada (exige BACKEDDY_PASSWORD no ambiente)
 #
 # Pode ser rodado de novo com segurança: reaplica as configurações.
 set -euo pipefail
 
-VERSION="0.1.0"
+VERSION="0.2.0"
 NAME="Backup da Casa"
-DISK=""
+DISKS=()
+MIRROR=1
 TM_PERCENT=60
 ASSUME_YES=0
 DATA=/srv/backeddy
@@ -28,10 +32,11 @@ SRC="$(cd "$(dirname "$0")" && pwd)"
 while [ $# -gt 0 ]; do
   case "$1" in
     --name) NAME="$2"; shift 2 ;;
-    --disk) DISK="$2"; shift 2 ;;
+    --disk) DISKS+=("$2"); shift 2 ;;
+    --no-mirror) MIRROR=0; shift ;;
     --tm-percent) TM_PERCENT="$2"; shift 2 ;;
     --yes) ASSUME_YES=1; shift ;;
-    -h|--help) sed -n '2,17p' "$0"; exit 0 ;;
+    -h|--help) sed -n '2,20p' "$0"; exit 0 ;;
     *) echo "Opção desconhecida: $1"; exit 1 ;;
   esac
 done
@@ -64,33 +69,87 @@ if [ -z "$PASSWORD" ]; then
   done
 fi
 
-# ---------- Disco dedicado (opcional) ----------
-if [ -n "$DISK" ]; then
-  [ -b "$DISK" ] || die "Disco $DISK não encontrado."
-  ROOTDEV=$(lsblk -no PKNAME "$(findmnt -no SOURCE /)" 2>/dev/null || true)
-  [ "/dev/$ROOTDEV" = "$DISK" ] && die "$DISK é o disco do sistema. Escolha outro disco."
-  if findmnt -rno TARGET "$DATA" >/dev/null 2>&1 && [ "$(findmnt -no SOURCE "$DATA")" = "$DISK" ]; then
-    ok "$DISK já está montado em $DATA (mantido)"
+# ---------- Discos de backup (opcional) ----------
+# 1 disco: btrfs simples. 2 ou mais: ESPELHO (RAID1), cada arquivo gravado em 2 discos.
+# Os discos não vão para o fstab: quem monta é o backeddy-mount, que usa o modo
+# degradado se um disco do espelho morrer (os backups continuam e o status avisa).
+human() { numfmt --to=iec --suffix=B "$1" 2>/dev/null || echo "$1 bytes"; }
+if [ "${#DISKS[@]}" -gt 0 ]; then
+  ROOTDEV=$(lsblk -no PKNAME "$(findmnt -no SOURCE /)" 2>/dev/null | head -1 || true)
+  declare -A SEEN=()
+  for d in "${DISKS[@]}"; do
+    [ -b "$d" ] || die "Disco $d não encontrado."
+    [ "/dev/$ROOTDEV" = "$d" ] && die "$d é o disco do sistema. Escolha outro disco."
+    [ -z "${SEEN[$d]:-}" ] || die "O disco $d foi informado duas vezes."
+    SEEN[$d]=1
+  done
+  apt-get install -y -qq btrfs-progs >/dev/null
+
+  if mountpoint -q "$DATA" && [ "$(findmnt -no FSTYPE "$DATA")" = btrfs ] \
+     && [ "$(blkid -s LABEL -o value "$(findmnt -no SOURCE "$DATA" | sed 's/\[.*//')" 2>/dev/null)" = backeddy ]; then
+    ok "Discos de backup já configurados em $DATA (mantidos)"
+    echo "    Para trocar ou acrescentar um disco: backeddy replace-disk / backeddy add-disk"
   else
-    say "Disco de backup"
-    lsblk -o NAME,SIZE,MODEL,FSTYPE,MOUNTPOINT "$DISK"
+    say "Discos de backup"
+    lsblk -o NAME,SIZE,MODEL,FSTYPE,MOUNTPOINT "${DISKS[@]}"
+    N=${#DISKS[@]}
+    TOTAL=0; MAX=0; MIN=0
+    for d in "${DISKS[@]}"; do
+      s=$(lsblk -bdno SIZE "$d")
+      TOTAL=$((TOTAL + s)); [ "$s" -gt "$MAX" ] && MAX=$s
+      { [ "$MIN" -eq 0 ] || [ "$s" -lt "$MIN" ]; } && MIN=$s
+    done
     echo
-    echo "⚠️  TUDO em $DISK será apagado para sempre."
+    if [ "$N" -eq 1 ]; then
+      DPROF=single; MPROF=dup
+      echo "Arranjo: 1 disco · $(human "$TOTAL") para backups (sem cópia em outro disco)"
+    elif [ "$MIRROR" = 1 ]; then
+      DPROF=raid1; MPROF=raid1
+      HALF=$((TOTAL / 2)); REST=$((TOTAL - MAX)); USABLE=$(( HALF < REST ? HALF : REST ))
+      echo "Arranjo: $N discos ESPELHADOS · $(human "$USABLE") protegidos"
+      echo "         Cada arquivo fica gravado em 2 discos: se um morrer, nada se perde."
+      if [ $(( (MAX - MIN) * 100 / MAX )) -ge 1 ]; then
+        echo "⚠️  Os discos têm tamanhos diferentes: parte do espaço do maior não entra no espelho."
+      fi
+    else
+      DPROF=single; MPROF=raid1
+      echo "Arranjo: $N discos SOMADOS · $(human "$TOTAL")"
+      echo "⚠️  SEM proteção: se qualquer disco morrer, o backup inteiro se perde."
+    fi
+    echo
+    echo "⚠️  TUDO em ${DISKS[*]} será apagado para sempre."
     if [ "$ASSUME_YES" != 1 ]; then
       read -rp "Para confirmar, digite APAGAR: " C
       [ "$C" = "APAGAR" ] || die "Cancelado. Nada foi alterado."
     fi
-    apt-get install -y -qq btrfs-progs >/dev/null
-    wipefs -a "$DISK" >/dev/null
-    mkfs.btrfs -f -L backeddy "$DISK" >/dev/null
+    systemctl stop smbd backeddy-kopia >/dev/null 2>&1 || true
+    mountpoint -q "$DATA" && umount "$DATA"
+    for d in "${DISKS[@]}"; do wipefs -a "$d" >/dev/null; done
+    mkfs.btrfs -f -L backeddy -d "$DPROF" -m "$MPROF" "${DISKS[@]}" >/dev/null
+    btrfs device scan >/dev/null 2>&1 || true
     mkdir -p "$DATA"
-    UUID=$(blkid -s UUID -o value "$DISK")
-    sed -i "\|[[:space:]]${DATA}[[:space:]]|d" /etc/fstab
-    echo "UUID=$UUID $DATA btrfs defaults,noatime,compress=zstd:1 0 0" >> /etc/fstab
-    systemctl daemon-reload
-    mount "$DATA"
-    ok "$DISK formatado (btrfs) e montado em $DATA"
+    # sem os discos montados, nada pode ser gravado por engano no disco do sistema
+    chattr +i "$DATA" 2>/dev/null || true
+    rm -rf "$ETC/kopia/repository.config" "$ETC/kopia/repository.config.kopia-password"
+    ok "Discos formatados (btrfs)"
   fi
+
+  # identidade do conjunto de discos e montagem pelo backeddy-mount (sem fstab)
+  install -d -m 0755 "$ETC"
+  if mountpoint -q "$DATA"; then FSUUID=$(findmnt -no UUID "$DATA"); else FSUUID=$(blkid -s UUID -o value "${DISKS[0]}"); fi
+  echo "UUID=$FSUUID" > "$ETC/disks.conf"
+  sed -i "\|[[:space:]]${DATA}[[:space:]]|d" /etc/fstab
+  install -m 0755 "$SRC/bin/backeddy-mount" /usr/local/sbin/backeddy-mount
+  install -m 0644 "$SRC/config/backeddy-mount.service" /etc/systemd/system/backeddy-mount.service
+  for svc in smbd backeddy-kopia; do
+    install -d "/etc/systemd/system/$svc.service.d"
+    install -m 0644 "$SRC/config/requires-backup-disk.conf" "/etc/systemd/system/$svc.service.d/backeddy-disk.conf"
+  done
+  systemctl daemon-reload
+  systemctl enable backeddy-mount >/dev/null 2>&1
+  systemctl restart backeddy-mount
+  mountpoint -q "$DATA" || die "Não consegui montar os discos de backup (veja: journalctl -t backeddy)."
+  ok "Discos montados em $DATA"
 fi
 
 # ---------- Pacotes ----------

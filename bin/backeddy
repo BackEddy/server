@@ -3,6 +3,8 @@
 #   backeddy status            situação do servidor
 #   backeddy add-pc NOME       autoriza um PC Windows a fazer backup (Kopia)
 #   backeddy passwd            troca a senha usada pelos Macs
+#   backeddy replace-disk NOVO [ANTIGO]   troca um disco do espelho (morto ou com defeito)
+#   backeddy add-disk NOVO     acrescenta um disco e passa a espelhar os backups
 set -euo pipefail
 ETC=/etc/backeddy; DATA=/srv/backeddy; KCONF=$ETC/kopia
 [ "$(id -u)" = 0 ] || { echo "Use: sudo backeddy $*"; exit 1; }
@@ -20,6 +22,26 @@ case "${1:-status}" in
     svc smbd "Time Machine (Samba)"
     svc avahi-daemon "Anúncio na rede (Avahi)"
     svc backeddy-kopia "Kopia Server (PCs)"
+    if [ -f "$ETC/disks.conf" ]; then
+      if mountpoint -q "$DATA"; then
+        SHOW=$(btrfs filesystem show "$DATA" 2>/dev/null)
+        PROF=$(btrfs filesystem df "$DATA" 2>/dev/null | awk -F'[ ,:]+' '/^Data/{print $2; exit}')
+        NDEV=$(echo "$SHOW" | grep -c '^[[:space:]]*devid' || true)
+        MISSING=$(echo "$SHOW" | grep -ci 'missing' || true)
+        ERRS=$(btrfs device stats "$DATA" 2>/dev/null | awk '$2 != 0 {n++} END {print n+0}')
+        case "$PROF" in RAID1*) LAYOUT="Espelho de $NDEV discos" ;; *) LAYOUT="$NDEV disco(s), sem espelho" ;; esac
+        if [ "$MISSING" -gt 0 ]; then
+          echo "🔴 Espelho DEGRADADO: falta um disco. Os backups continuam, mas sem proteção."
+          echo "   Coloque um disco novo e rode: sudo backeddy replace-disk /dev/NOVO"
+        elif [ "$ERRS" -gt 0 ]; then
+          echo "🟡 $LAYOUT · um disco registrou erros de leitura/gravação (veja: btrfs device stats $DATA)"
+        else
+          echo "🟢 $LAYOUT"
+        fi
+      else
+        echo "🔴 Discos de backup NÃO montados: backups parados (veja: journalctl -t backeddy)"
+      fi
+    fi
     echo
     df -h "$DATA" | awk 'NR==2{printf "💾 Disco: %s usados de %s (%s livres, %s)\n",$3,$2,$4,$5}'
     TM=$(du -sh "$DATA/timemachine" 2>/dev/null | cut -f1); echo "   Time Machine: ${TM:-0}"
@@ -56,5 +78,47 @@ MSG
   passwd)
     smbpasswd backeddy
     ;;
-  *) sed -n '2,5p' "$0"; exit 1 ;;
+  replace-disk)
+    NEW="${2:-}"; OLD="${3:-}"
+    [ -b "$NEW" ] || { echo "Use: sudo backeddy replace-disk /dev/NOVO [/dev/ANTIGO]"; exit 1; }
+    mountpoint -q "$DATA" || { echo "Os discos de backup não estão montados."; exit 1; }
+    btrfs filesystem show "$DATA" | grep -qw "$NEW" && { echo "$NEW já faz parte dos discos de backup."; exit 1; }
+    if [ -z "$OLD" ]; then
+      OLD=$(btrfs filesystem show "$DATA" | awk 'tolower($0) ~ /missing/ && $1 == "devid" {print $2; exit}')
+      [ -n "$OLD" ] || { echo "Nenhum disco está faltando. Diga qual substituir: sudo backeddy replace-disk $NEW /dev/ANTIGO"; exit 1; }
+      DESC="o disco que está faltando"
+    else
+      DESC="$OLD"
+    fi
+    lsblk -o NAME,SIZE,MODEL "$NEW"
+    echo "⚠️  TUDO em $NEW será apagado. Ele vai substituir $DESC."
+    echo "   (o disco novo precisa ser do mesmo tamanho ou maior que o antigo)"
+    read -rp "Para confirmar, digite APAGAR: " C
+    [ "$C" = "APAGAR" ] || { echo "Cancelado. Nada foi alterado."; exit 1; }
+    wipefs -a "$NEW" >/dev/null
+    echo "Reconstruindo o espelho. Em discos grandes leva horas: não desligue o servidor."
+    btrfs replace start -B -f "$OLD" "$NEW" "$DATA" || {
+      echo "✗ A troca falhou. O disco novo precisa ser do mesmo tamanho ou maior que o antigo."; exit 1; }
+    DEVID=$(btrfs filesystem show "$DATA" | awk -v d="$NEW" '$1 == "devid" && $NF == d {print $2}')
+    [ -n "$DEVID" ] && btrfs filesystem resize "$DEVID:max" "$DATA" >/dev/null
+    # o que foi gravado enquanto faltava um disco volta a ter cópia nos dois
+    btrfs balance start -dconvert=raid1,soft -mconvert=raid1,soft "$DATA" >/dev/null 2>&1 || true
+    echo "✅ Espelho reconstruído. Confira com: sudo backeddy status"
+    ;;
+  add-disk)
+    NEW="${2:-}"
+    [ -b "$NEW" ] || { echo "Use: sudo backeddy add-disk /dev/NOVO"; exit 1; }
+    mountpoint -q "$DATA" || { echo "Os discos de backup não estão montados."; exit 1; }
+    btrfs filesystem show "$DATA" | grep -qw "$NEW" && { echo "$NEW já faz parte dos discos de backup."; exit 1; }
+    lsblk -o NAME,SIZE,MODEL "$NEW"
+    echo "⚠️  TUDO em $NEW será apagado. Depois disso, cada backup fica gravado em dois discos."
+    read -rp "Para confirmar, digite APAGAR: " C
+    [ "$C" = "APAGAR" ] || { echo "Cancelado. Nada foi alterado."; exit 1; }
+    wipefs -a "$NEW" >/dev/null
+    btrfs device add -f "$NEW" "$DATA"
+    echo "Copiando os backups para o novo disco. Pode levar horas: não desligue o servidor."
+    btrfs balance start -dconvert=raid1,soft -mconvert=raid1,soft "$DATA"
+    echo "✅ Pronto: backups espelhados. Confira com: sudo backeddy status"
+    ;;
+  *) sed -n '2,7p' "$0"; exit 1 ;;
 esac

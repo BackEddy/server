@@ -37,16 +37,35 @@ Baixe a ISO **netinst amd64** do Debian 13 em <https://www.debian.org/download> 
 
 ## 4. Rodar o Backeddy Server
 
-Entre como root (no console da VM, ou `ssh seu-usuario@IP` e depois `su -`):
+Descubra o IP da VM no console dela com `hostname -I`. Depois, do Terminal do Mac:
+
+```bash
+# jeito A: baixar do GitHub (dentro da VM)
+ssh seu-usuario@IP
+su -
+wget -qO- https://github.com/BackEddy/server/archive/refs/heads/main.tar.gz | tar xz
+cd server-main
+
+# jeito B: copiar do Mac (use -rp para manter as permissões)
+scp -rp ~/backeddy-server seu-usuario@IP:
+ssh seu-usuario@IP
+su -
+cd /home/seu-usuario/backeddy-server
+```
+
+Em seguida, ainda como root:
 
 ```bash
 lsblk        # confira: o de 16 GB é o sistema (sda); o grande é o dos backups (provavelmente sdb)
-wget -qO- https://github.com/BackEddy/server/archive/refs/heads/main.tar.gz | tar xz
-cd server-main
-./install.sh --name "Backup da Casa" --disk /dev/sdb
+bash install.sh --name "Backup da Casa" --disk /dev/sdb
 ```
 
-O script pede a senha do servidor e, para apagar o disco, pede para digitar **APAGAR**.
+> Com pouca memória livre no Windows, a VM pode não ligar com 2 GB. Use 512 MB
+> (`Set-VMMemory Backeddy-Server -StartupBytes 512MB`): o instalador do Debian entra em
+> "low memory mode" (em inglês) e funciona. No menu de componentes, marque `choose-mirror`,
+> `nic-modules`, `partman-auto`, `partman-efi` e `partman-ext3`.
+
+O script pede a senha do servidor (a mesma pode ser usada de novo se rodar outra vez) e, para apagar o disco, pede para digitar **APAGAR**.
 No final mostra o resumo com os endereços.
 
 ## 5. Conectar o Mac

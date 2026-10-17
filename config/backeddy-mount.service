@@ -1,0 +1,12 @@
+[Unit]
+Description=Backeddy: monta os discos de backup (modo degradado se faltar um disco do espelho)
+After=local-fs.target systemd-udev-settle.service
+Before=smbd.service backeddy-kopia.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/local/sbin/backeddy-mount
+
+[Install]
+WantedBy=multi-user.target

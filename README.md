@@ -4,25 +4,26 @@
 
 <p align="center"><b>Turn any old PC into a backup server for your Macs (Time Machine) and Windows PCs.</b></p>
 
-> **Status: early preview (0.1).** Today it's an install script for a fresh Debian. The goal is a USB stick you plug into an old PC: confirm, type a password, done — created by the Backeddy app.
+> **Status: early preview (0.2).** Today it's an install script for a fresh Debian. The goal is a USB stick you plug into an old PC: confirm, type a password, done — created by the Backeddy app.
 
 ## What it sets up
 
 - **Time Machine over SMB**, tuned for macOS — the server shows up by itself in Time Machine settings.
 - **Kopia Repository Server** for Backeddy for Windows (and any Kopia client).
-- Optional **dedicated backup disk** formatted as btrfs (checksums, compression).
+- One or more **dedicated backup disks** (btrfs: checksums, compression). **Two or more are mirrored** automatically; if one dies, backups keep running and `backeddy replace-disk` rebuilds the mirror.
 - **Never sleeps** (laptop lid closed is fine), **automatic security updates**, **SMART disk monitoring**.
-- `backeddy status` / `backeddy add-pc` / `backeddy passwd` helper.
+- `backeddy status` / `add-pc` / `passwd` / `replace-disk` / `add-disk` helper.
 
 ## Install (Debian 12 or 13, as root)
 
 ```bash
 wget -qO- https://github.com/BackEddy/server/archive/refs/heads/main.tar.gz | tar xz
 cd server-main
-./install.sh --name "Backup da Casa" --disk /dev/sdb   # --disk is optional and ERASES that disk
+bash install.sh --name "Backup da Casa" --disk /dev/sdb                  # one disk (ERASED)
+bash install.sh --name "Backup da Casa" --disk /dev/sdb --disk /dev/sdc  # two disks, mirrored
 ```
 
-Step-by-step test guide (Hyper-V, in Portuguese): [docs/TESTING.pt-BR.md](docs/TESTING.pt-BR.md)
+Test guides (Hyper-V, in Portuguese): [install](docs/TESTING.pt-BR.md) · [disks: mirror, failure, replacement](docs/TESTING-discos.pt-BR.md)
 
 ## Part of Backeddy
 

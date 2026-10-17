@@ -1,0 +1,19 @@
+#!/bin/bash
+# Monta os discos de backup do Backeddy Server em /srv/backeddy.
+# Se faltar um disco do espelho, monta em modo DEGRADADO para os backups continuarem.
+DATA=/srv/backeddy
+[ -f /etc/backeddy/disks.conf ] || exit 0
+. /etc/backeddy/disks.conf
+mountpoint -q "$DATA" && exit 0
+btrfs device scan >/dev/null 2>&1
+OPTS=noatime,compress=zstd:1
+for _ in 1 2 3 4 5 6; do
+  mount -o "$OPTS" UUID="$UUID" "$DATA" 2>/dev/null && exit 0
+  sleep 5   # discos USB podem demorar a aparecer
+done
+if mount -o "$OPTS,degraded" UUID="$UUID" "$DATA" 2>/dev/null; then
+  logger -t backeddy "ATENÇÃO: discos montados em modo DEGRADADO (falta um disco do espelho). Rode: backeddy status"
+  exit 0
+fi
+logger -t backeddy "ERRO: não foi possível montar os discos de backup ($UUID)"
+exit 1
