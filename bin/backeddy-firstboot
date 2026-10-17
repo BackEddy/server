@@ -1,48 +1,56 @@
 #!/bin/bash
 # Primeiro boot do Backeddy Server instalado pelo pendrive: configura os discos de backup,
 # Samba (Time Machine) e Kopia rodando o install.sh sem perguntas. Depois se desliga.
+# Enquanto trabalha, mostra uma tela limpa no monitor do PC (tty1).
 set -uo pipefail
 ENV=/etc/backeddy/firstboot.env
 LOG=/var/log/backeddy-firstboot.log
+TTY=/dev/tty1
 [ -f "$ENV" ] || exit 0
 # shellcheck disable=SC1090
 . "$ENV"
 
-issue() {
-  printf '%s\n' "$@" > /etc/issue
-  agetty --reload >/dev/null 2>&1 || true
+screen() { # $1 = linha de situação
+  { printf '\033[2J\033[H\033[?25l\n'
+    printf '  \033[1;36mBackeddy Server\033[0m\n'
+    printf '  \033[36m──────────────────────────────────────────────────────────\033[0m\n\n'
+    printf '  %s\n\n' "$1"
+    printf '  \033[2mNão desligue o computador. Isso acontece só uma vez.\033[0m\n'
+  } > "$TTY" 2>/dev/null || true
 }
-
-issue "" "  Backeddy Server" "" "  Preparando os discos de backup... (alguns minutos, nao desligue)" ""
 
 NAME=$(printf '%s' "$NAME_B64" | base64 -d)
 ARGS=(--yes --name "$NAME" --tm-percent "${TM_PERCENT:-60}")
+screen "Procurando os discos de backup…"
 for d in $DISKS; do
   # espera o disco aparecer (discos USB podem demorar)
   for _ in $(seq 1 30); do [ -b "$d" ] && break; sleep 1; done
   ARGS+=(--disk "$d")
 done
 
-if BACKEDDY_PASSWORD=$(printf '%s' "$PASSWORD_B64" | base64 -d) \
-   bash /opt/backeddy-server/install.sh "${ARGS[@]}" >"$LOG" 2>&1; then
-  rm -f "$ENV"
+BACKEDDY_PASSWORD=$(printf '%s' "$PASSWORD_B64" | base64 -d) \
+  bash /opt/backeddy-server/install.sh "${ARGS[@]}" >"$LOG" 2>&1 &
+PID=$!
+START=$(date +%s)
+SPIN='|/-\'
+i=0
+while kill -0 "$PID" 2>/dev/null; do
+  EL=$(( $(date +%s) - START ))
+  screen "${SPIN:i++%4:1}  Preparando os discos de backup e os serviços…   $((EL / 60)) min $((EL % 60)) s"
+  sleep 1
+done
+wait "$PID"
+RC=$?
+
+rm -f "$ENV"   # a senha não fica no disco
+printf '\033[2J\033[H\033[?25h' > "$TTY" 2>/dev/null || true
+if [ "$RC" = 0 ]; then
   systemctl disable backeddy-firstboot.service >/dev/null 2>&1 || true
-  # shellcheck disable=SC1091
-  . /etc/backeddy/server.conf
-  issue "" \
-    "  Backeddy Server  -  $NAME" \
-    "" \
-    "  Pronto! Endereco na rede: $SLUG.local  (\\4)" \
-    "" \
-    "  Mac:     Ajustes do Sistema > Geral > Time Machine > + > \"$NAME\"" \
-    "           usuario: backeddy   senha: a definida na instalacao" \
-    "  Windows: Backeddy for Windows (em breve) ou Kopia: https://$SLUG.local:51515" \
-    "" \
-    "  Administracao: entre como 'admin' e rode:  sudo backeddy status" \
-    ""
+  /usr/local/bin/backeddy issue >/dev/null 2>&1 || true
 else
-  rm -f "$ENV"   # a senha não fica no disco; para tentar de novo, rode o install.sh na mão
-  issue "" "  Backeddy Server: ERRO ao preparar os discos." \
-    "  Entre como 'admin' e veja: sudo cat $LOG" ""
+  # para tentar de novo, rode o install.sh na mão
+  printf '%s\n' "" "  Backeddy Server: ERRO ao preparar os discos." \
+    "  Entre como 'admin' e veja: sudo cat $LOG" "" > /etc/issue
+  agetty --reload >/dev/null 2>&1 || true
   exit 1
 fi

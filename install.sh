@@ -19,7 +19,7 @@
 # Pode ser rodado de novo com segurança: reaplica as configurações.
 set -euo pipefail
 
-VERSION="0.3.0"
+VERSION="0.4.0"
 NAME="Backup da Casa"
 DISKS=()
 MIRROR=1
@@ -273,6 +273,17 @@ systemctl enable --now smartd >/dev/null 2>&1 || true
 ok "Nunca dorme (nem com a tampa fechada) e se atualiza sozinho"
 
 install -m 0755 "$SRC/bin/backeddy" /usr/local/bin/backeddy
+
+# Tela do monitor do servidor: situação + como conectar, atualizada no boot e a cada 2 minutos
+install -m 0644 "$SRC/config/backeddy-issue.service" /etc/systemd/system/backeddy-issue.service
+install -m 0644 "$SRC/config/backeddy-issue.timer" /etc/systemd/system/backeddy-issue.timer
+install -d /etc/systemd/system/getty@tty1.service.d
+install -m 0644 "$SRC/config/getty-backeddy.conf" /etc/systemd/system/getty@tty1.service.d/backeddy.conf
+systemctl daemon-reload
+systemctl enable backeddy-issue.service backeddy-issue.timer >/dev/null 2>&1
+systemctl start backeddy-issue.timer >/dev/null 2>&1 || true
+/usr/local/bin/backeddy issue >/dev/null 2>&1 || true
+ok "Tela do servidor mostra a situação e como conectar"
 
 IP=$(hostname -I | awk '{print $1}')
 cat <<MSG

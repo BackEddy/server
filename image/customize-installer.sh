@@ -14,7 +14,9 @@ mkdir -p "$R/etc/systemd/network"
 printf '[Match]\nName=en* eth*\n\n[Network]\nDHCP=yes\n' > "$R/etc/systemd/network/20-cabo.network"
 chroot "$R" systemctl enable systemd-networkd >/dev/null 2>&1
 
-# Entra direto no instalador no tty1 (sem login), com fonte grande
+# Entra direto no instalador no tty1 (sem login).
+# O programa roda a partir da memória (/run): assim o pendrive pode ser retirado no fim,
+# e o instalador percebe e reinicia o PC sozinho.
 mkdir -p "$R/etc/systemd/system/getty@tty1.service.d"
 cat > "$R/etc/systemd/system/getty@tty1.service.d/autologin.conf" <<'EOF'
 [Service]
@@ -23,9 +25,10 @@ ExecStart=-/sbin/agetty --autologin root --noclear %I $TERM
 EOF
 cat > "$R/root/.bash_profile" <<'EOF'
 if [ "$(tty)" = /dev/tty1 ]; then
-  setfont /usr/share/consolefonts/Uni3-TerminusBold32x16.psf.gz 2>/dev/null
   export LANG=C.UTF-8
-  /usr/local/bin/backeddy-installer
+  udevadm settle -t 15 2>/dev/null   # espera o driver de vídeo e os discos
+  cp /usr/local/bin/backeddy-installer /run/backeddy-installer
+  /run/backeddy-installer
   echo
   echo "Instalador encerrado. Para abrir de novo: backeddy-installer"
 fi

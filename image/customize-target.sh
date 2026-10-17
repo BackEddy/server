@@ -35,22 +35,27 @@ sed -i -e 's/^# *pt_BR.UTF-8/pt_BR.UTF-8/' -e 's/^# *en_US.UTF-8/en_US.UTF-8/' "
 chroot "$R" locale-gen >/dev/null
 echo 'LANG=pt_BR.UTF-8' > "$R/etc/default/locale"
 
-# Console legível (a tela do servidor mostra como conectar)
+# Console com a fonte padrão (pequena), com acentos e os símbolos usados na tela do servidor
 cat > "$R/etc/default/console-setup" <<'EOF'
 ACTIVE_CONSOLES="/dev/tty[1-6]"
 CHARMAP="UTF-8"
-CODESET="guess"
-FONTFACE="TerminusBold"
-FONTSIZE="16x32"
+CODESET="Uni2"
+FONTFACE="Fixed"
+FONTSIZE="8x16"
 EOF
 printf '\n  Backeddy Server\n\n  Iniciando...\n\n' > "$R/etc/issue"
 
-# GRUB: o instalador roda grub-install/update-grub; aqui só os padrões e os ganchos de kernel
+# A tela de login só aparece depois do primeiro boot e da atualização da tela de situação
+mkdir -p "$R/etc/systemd/system/getty@tty1.service.d"
+install -m 0644 "$REPO/config/getty-backeddy.conf" "$R/etc/systemd/system/getty@tty1.service.d/backeddy.conf"
+
+# GRUB: o instalador roda grub-install/update-grub; aqui só os padrões e os ganchos de kernel.
+# loglevel=3 e systemd.ssh_auto=no: boot com a tela limpa (sem avisos técnicos, como os de VSOCK no Hyper-V)
 cat > "$R/etc/default/grub" <<'EOF'
 GRUB_DEFAULT=0
 GRUB_TIMEOUT=2
 GRUB_DISTRIBUTOR="Backeddy Server"
-GRUB_CMDLINE_LINUX_DEFAULT="quiet"
+GRUB_CMDLINE_LINUX_DEFAULT="quiet loglevel=3 systemd.ssh_auto=no"
 GRUB_CMDLINE_LINUX=""
 GRUB_DISABLE_OS_PROBER=true
 EOF

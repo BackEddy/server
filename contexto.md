@@ -100,7 +100,7 @@ via QR); x86 64 bits apenas (Debian 13 sem i386; Kopia sem binário 32 bits).
 - Estado atual da VM: espelho com disco-a (20 GB) + disco-c (30 GB); `backups.vhdx` (1 TB) desanexado, ainda
   no B:; checkpoints automáticos desligados. A VM antiga "TimeMachine" pode ter o mesmo problema de checkpoints
   (verificar `Get-VMCheckpoint TimeMachine`).
-- Próximo: publicar a 0.3.0, rodar o workflow "Imagem do pendrive" e testar no Hyper-V (docs/TESTING-pendrive.pt-BR.md).
+- 0.3.0 publicada (commits df60cdc + b24a1ba: `-buildvcs=false` no go build do CI).
 
 ### Fase 2 — instalador do pendrive (0.3.0, escrita em 16/10/2026 ~23h50)
 - Decisões: só cabo de rede; sem testes automáticos de boot (manual no Hyper-V); só UEFI (BIOS antiga depois).
@@ -119,12 +119,38 @@ via QR); x86 64 bits apenas (Debian 13 sem i386; Kopia sem binário 32 bits).
 - Workflow `.github/workflows/image.yml` (container debian:trixie --privileged), manual ou por tag v*.
 - Para dar push em arquivos de workflow, o gh precisa do escopo `workflow` (`gh auth refresh -s workflow`).
 
+### Teste da 0.3.0 no Hyper-V (17/10/2026) — PASSOU
+- Build do CI: run 39034235713, ~5 min, artefato `backeddy-server-imagem` (1,44 GB; baixar logado no GitHub).
+- VM "Backeddy-Teste-Pendrive" (1 GB, B:\Backeddy\teste-pendrive): pendrive .vhdx + ssd 24G + hd1/hd2 60G.
+- Secure Boot ok, instalador direto; receita escolhida: SSD 24G só sistema + espelho 2×60G; pendrive fora da lista.
+- Instalou em ~2 min; tirar o "pendrive" com Stop-VM/Remove-VMHardDiskDrive; primeiro boot ok;
+  status tudo verde ("Espelho de 2 discos", 59 GB livres), IP 192.168.0.68; o Mac encontra "Backup da Casa".
+- Defeitos visuais achados: emojis viram "◆" no console; mensagens "systemd-ssh-generator ... AF_VSOCK"
+  (só Hyper-V) sujando a tela; título da boas-vindas passando da borda; fonte grande demais no servidor.
+
+### 0.4.0 — instalador gráfico + tela do servidor (escrita em 17/10/2026, falta build e teste)
+- Pedidos do Eddy: fonte padrão no servidor; fim do setup "Retire o pendrive e aperte Enter" + aviso de
+  mensagens no primeiro início; boot sempre termina com "servidor funcionando", diagnóstico completo e
+  endereço SSH; instalador mais gráfico, com cara de Mac (opção B, só teclado); reiniciar ao tirar o pendrive.
+- Instalador: `gui.go`/`draw.go`/`fb.go` desenham no /dev/fb0 (janela clara estilo macOS, etapas na lateral,
+  botões à direita, spinner, fonte Inter embutida); console em KD_GRAPHICS; cai no modo texto se não houver
+  framebuffer (`--text` força). Dependências vendorizadas (x/image, x/text) para o build não precisar de rede.
+  `--shots DIR` gera PNGs das telas. Sem identidade da Apple: sem os botões "semáforo" de janela e com
+  ícone próprio (degradê laranja→rosa da família, dois discos empilhados + seta), não um relógio com seta.
+  Funciona de 640×480 para cima (abaixo disso, modo texto). Roda de /run (RAM) para o pendrive poder sair: ao sumir a partição
+  `backeddy-inst`, mostra "Reiniciando…" e reinicia (syscall.Reboot).
+- Servidor: console Uni2-Fixed16 (padrão), GRUB `quiet loglevel=3 systemd.ssh_auto=no` (sem VSOCK);
+  primeiro boot com tela limpa no tty1 (spinner + tempo); `backeddy issue` + `backeddy-issue.service/.timer`
+  (boot e a cada 2 min) escrevem /etc/issue com "Nome — servidor funcionando/atenção/com problema", Mac,
+  Windows, SSH (IP via `\4` do agetty) e o `backeddy status` completo; getty@tty1 espera firstboot e issue.
+  No console, `backeddy status` usa [  OK  ]/[AVISO ]/[ ERRO ] coloridos; por SSH continua com emojis.
+
 ### Plano de construção
 | Fase | Conteúdo | Situação |
 | --- | --- | --- |
 | 0 | Repo BackEddy/server e forma de publicar | Feita |
 | 1 | Script do servidor + VM | Feita (0.1); 0.2/0.2.1 discos testados |
-| 2 | Instalador em Go + imagem do pendrive (.img com partição gravável do plano) | Escrita (0.3.0), falta 1º build e teste |
+| 2 | Instalador em Go + imagem do pendrive (.img com partição gravável do plano) | Feita (0.3.0 testada); 0.4.0 gráfica escrita |
 | 3 | Painel (monitor + web), **alertas**, arquivo de plano, divisão de espaço | A fazer |
 | 4 | GitHub Actions: mmdebstrap/live-build, testes QEMU, assinatura, Releases | A fazer |
 | 5 | Aba Servidor no Backeddy for Mac 2.1 | A fazer |

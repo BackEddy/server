@@ -1,0 +1,9 @@
+[Unit]
+Description=Backeddy: mantém a tela do monitor do servidor em dia
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=2min
+
+[Install]
+WantedBy=timers.target

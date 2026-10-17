@@ -1,0 +1,13 @@
+[Unit]
+Description=Backeddy: atualiza a tela do monitor do servidor (situação e como conectar)
+After=network-online.target backeddy-mount.service smbd.service avahi-daemon.service backeddy-kopia.service
+Wants=network-online.target
+ConditionPathExists=/etc/backeddy/server.conf
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/backeddy issue
+TimeoutStartSec=90
+
+[Install]
+WantedBy=multi-user.target

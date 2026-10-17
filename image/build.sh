@@ -71,7 +71,7 @@ set default=0
 insmod all_video
 menuentry "Backeddy Server — instalar" {
   search --no-floppy --label backeddy-inst --set=root
-  linux /boot/vmlinuz-$KVER root=PARTLABEL=backeddy-inst rw quiet loglevel=3
+  linux /boot/vmlinuz-$KVER root=PARTLABEL=backeddy-inst rw quiet loglevel=3 systemd.ssh_auto=no
   initrd /boot/initrd.img-$KVER
 }
 menuentry "Desligar" { halt }

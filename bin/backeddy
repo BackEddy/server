@@ -5,6 +5,7 @@
 #   backeddy passwd            troca a senha usada pelos Macs
 #   backeddy replace-disk NOVO [ANTIGO]   troca um disco do espelho (morto ou com defeito)
 #   backeddy add-disk NOVO     acrescenta um disco e passa a espelhar os backups
+#   backeddy issue             atualiza a tela do monitor do servidor (situação + como conectar)
 set -euo pipefail
 ETC=/etc/backeddy; DATA=/srv/backeddy; KCONF=$ETC/kopia
 [ "$(id -u)" = 0 ] || { echo "Use: sudo backeddy $*"; exit 1; }
@@ -15,16 +16,25 @@ kenv() {
 }
 svc() {
   case "$(systemctl is-active "$1" 2>/dev/null)" in
-    active) echo "🟢 $2" ;;
-    activating) echo "⏳ $2 (aguardando os discos de backup…)" ;;
-    *) echo "🔴 $2 (parado: sudo systemctl status $1)" ;;
+    active) echo "$I_OK $2" ;;
+    activating) echo "$I_WAIT $2 (aguardando os discos de backup…)" ;;
+    *) echo "$I_BAD $2 (parado: sudo systemctl status $1)" ;;
   esac
 }
+# No monitor do próprio servidor (console) não existem emojis: usa cores e texto.
+if [ "${TERM:-}" = linux ] || [ -n "${BACKEDDY_PLAIN:-}" ]; then
+  I_OK=$'\e[1;32m[  OK  ]\e[0m'; I_WARN=$'\e[1;33m[AVISO ]\e[0m'; I_BAD=$'\e[1;31m[ ERRO ]\e[0m'
+  I_WAIT=$'\e[1;36m[ .... ]\e[0m'; I_OFF=$'\e[2m[  --  ]\e[0m'; I_HEAD='  '; I_DISK='        '; I_KEY='        '; I_DONE=$'\e[1;32m[  OK  ]\e[0m'
+  IND='        '
+else
+  I_OK='🟢'; I_WARN='🟡'; I_BAD='🔴'; I_WAIT='⏳'; I_OFF='⚪'; I_HEAD='🌀'; I_DISK='💾'; I_KEY='🔐'; I_DONE='✅'
+  IND='  '
+fi
 human() { numfmt --to=iec --suffix=B "$1" 2>/dev/null || echo "$1"; }
 
 case "${1:-status}" in
   status)
-    echo "🌀 $NAME  ·  $SLUG.local  ·  $(hostname -I | awk '{print $1}')  ·  Backeddy Server $VERSION"
+    echo "$I_HEAD $NAME  ·  $SLUG.local  ·  $(hostname -I | awk '{print $1}')  ·  Backeddy Server $VERSION"
     echo
     svc smbd "Time Machine (Samba)"
     svc avahi-daemon "Anúncio na rede (Avahi)"
@@ -38,19 +48,19 @@ case "${1:-status}" in
         ERRS=$(btrfs device stats "$DATA" 2>/dev/null | awk '$2 != 0 {n++} END {print n+0}')
         case "$PROF" in RAID1*) LAYOUT="Espelho de $NDEV discos" ;; *) LAYOUT="$NDEV disco(s), sem espelho" ;; esac
         if [ "$MISSING" -gt 0 ]; then
-          echo "🔴 Espelho DEGRADADO: falta um disco. Os backups continuam, mas sem proteção."
-          echo "   Coloque um disco novo e rode: sudo backeddy replace-disk /dev/NOVO"
+          echo "$I_BAD Espelho DEGRADADO: falta um disco. Os backups continuam, mas sem proteção."
+          echo "$IND Coloque um disco novo e rode: sudo backeddy replace-disk /dev/NOVO"
         elif [ "$ERRS" -gt 0 ]; then
-          echo "🟡 $LAYOUT · um disco registrou erros de leitura/gravação (veja: btrfs device stats $DATA)"
+          echo "$I_WARN $LAYOUT · um disco registrou erros de leitura/gravação (veja: btrfs device stats $DATA)"
         else
-          echo "🟢 $LAYOUT"
+          echo "$I_OK $LAYOUT"
         fi
       else
-        echo "🔴 Discos de backup NÃO montados: backups parados (veja: journalctl -t backeddy)"
+        echo "$I_BAD Discos de backup NÃO montados: backups parados (veja: journalctl -t backeddy)"
       fi
     fi
     if [ "$(systemctl is-active backeddy-mount 2>/dev/null)" = activating ]; then
-      echo "⏳ Montando os discos de backup (até ~40 s se algum disco estiver faltando)…"
+      echo "$I_WAIT Montando os discos de backup (até ~40 s se algum disco estiver faltando)…"
     fi
     if [ ! -f "$ETC/disks.conf" ] || mountpoint -q "$DATA"; then
       echo
@@ -59,20 +69,20 @@ case "${1:-status}" in
           /^Data,/ { if (match($0, /Used:[0-9]+/)) u += substr($0, RSTART + 5, RLENGTH - 5) }
           /Free \(estimated\):/ { f = $3 }
           END { print u + 0, f + 0 }')
-        echo "💾 Espaço útil: $(human "$USED") usados · $(human "$FREE") livres"
+        echo "$I_DISK Espaço útil: $(human "$USED") usados · $(human "$FREE") livres"
       else
-        df -h "$DATA" | awk 'NR==2{printf "💾 Disco: %s usados de %s (%s livres, %s)\n",$3,$2,$4,$5}'
+        df -h "$DATA" | awk -v i="$I_DISK" 'NR==2{printf "%s Disco: %s usados de %s (%s livres, %s)\n",i,$3,$2,$4,$5}'
       fi
-      TM=$(du -sh "$DATA/timemachine" 2>/dev/null | cut -f1 || true); echo "   Time Machine: ${TM:-0}"
-      KP=$(du -sh "$DATA/kopia" 2>/dev/null | cut -f1 || true); echo "   PCs (Kopia): ${KP:-0}"
+      TM=$(du -sh "$DATA/timemachine" 2>/dev/null | cut -f1 || true); echo "$IND   Time Machine: ${TM:-0}"
+      KP=$(du -sh "$DATA/kopia" 2>/dev/null | cut -f1 || true); echo "$IND   PCs (Kopia): ${KP:-0}"
     fi
     echo
     for d in $(lsblk -dno NAME,TYPE | awk '$2=="disk"{print $1}'); do
       H=$(smartctl -H "/dev/$d" 2>/dev/null | awk -F: '/overall-health|SMART Health Status/{gsub(/^ +/,"",$2);print $2}')
-      case "$H" in PASSED|OK) echo "🟢 /dev/$d saudável" ;; "") echo "⚪ /dev/$d sem SMART (normal em máquina virtual)" ;; *) echo "🔴 /dev/$d: $H — troque este disco!" ;; esac
+      case "$H" in PASSED|OK) echo "$I_OK /dev/$d saudável" ;; "") echo "$I_OFF /dev/$d sem SMART (normal em máquina virtual)" ;; *) echo "$I_BAD /dev/$d: $H — troque este disco!" ;; esac
     done
     echo
-    [ -f "$KCONF/fingerprint" ] && echo "🔐 Impressão digital do certificado (PCs): $(cat "$KCONF/fingerprint")"
+    [ -f "$KCONF/fingerprint" ] && echo "$I_KEY Impressão digital do certificado (PCs): $(cat "$KCONF/fingerprint")"
     ;;
   add-pc)
     PC="${2:-}"; [ -n "$PC" ] || { echo "Use: sudo backeddy add-pc NOME-DO-PC"; exit 1; }
@@ -84,7 +94,7 @@ case "${1:-status}" in
       --server-control-username=server-control --server-control-password="$(cat "$KCONF/control-password")" >/dev/null 2>&1 \
       || systemctl restart backeddy-kopia
     cat <<MSG
-✅ PC "$PC" autorizado.
+$I_DONE PC "$PC" autorizado.
 
 No PC (teste manual com o Kopia, até o Backeddy for Windows existir):
   kopia repository connect server --url=https://$SLUG.local:51515 \\
@@ -123,7 +133,7 @@ MSG
     [ -n "$DEVID" ] && btrfs filesystem resize "$DEVID:max" "$DATA" >/dev/null
     # o que foi gravado enquanto faltava um disco volta a ter cópia nos dois
     btrfs balance start -dconvert=raid1,soft -mconvert=raid1,soft "$DATA" >/dev/null 2>&1 || true
-    echo "✅ Espelho reconstruído. Confira com: sudo backeddy status"
+    echo "$I_DONE Espelho reconstruído. Confira com: sudo backeddy status"
     ;;
   add-disk)
     NEW="${2:-}"
@@ -138,7 +148,41 @@ MSG
     btrfs device add -f "$NEW" "$DATA"
     echo "Copiando os backups para o novo disco. Pode levar horas: não desligue o servidor."
     btrfs balance start -dconvert=raid1,soft -mconvert=raid1,soft "$DATA"
-    echo "✅ Pronto: backups espelhados. Confira com: sudo backeddy status"
+    echo "$I_DONE Pronto: backups espelhados. Confira com: sudo backeddy status"
     ;;
-  *) sed -n '2,7p' "$0"; exit 1 ;;
+  issue)
+    # Tela do monitor do servidor (antes do login): situação completa + como conectar.
+    # \4 é trocado pelo agetty pelo IP atual, então o endereço nunca fica velho.
+    ST=$(TERM=linux BACKEDDY_PLAIN=1 "$0" status 2>/dev/null | tail -n +3 || true)
+    if printf '%s' "$ST" | grep -q 'ERRO'; then
+      HEAD=$'\e[1;31m'"$NAME — com problema (veja abaixo)"$'\e[0m'
+    elif printf '%s' "$ST" | grep -q 'AVISO\|\.\.\.\.'; then
+      HEAD=$'\e[1;33m'"$NAME — atenção (veja abaixo)"$'\e[0m'
+    else
+      HEAD=$'\e[1;32m'"$NAME — servidor funcionando"$'\e[0m'
+    fi
+    LINE=$'\e[36m'"────────────────────────────────────────────────────────────────────────"$'\e[0m'
+    NEW=$(mktemp)
+    {
+      echo
+      echo "  $LINE"
+      echo "    $HEAD"
+      echo
+      echo "    Mac:      Ajustes do Sistema › Geral › Time Machine › \"$NAME\""
+      echo "              usuário: backeddy · senha: a definida na instalação"
+      echo "    Windows:  https://$SLUG.local:51515   (ou https://\\4:51515)"
+      echo "    Acesso:   ssh admin@$SLUG.local   (ou admin@\\4)"
+      echo "  $LINE"
+      printf '%s\n' "$ST" | sed 's/^/    /'
+      echo "  $LINE"
+      echo "    Backeddy Server $VERSION · situação a qualquer momento: sudo backeddy status"
+      echo
+    } > "$NEW"
+    if ! cmp -s "$NEW" /etc/issue; then
+      install -m 0644 "$NEW" /etc/issue
+      agetty --reload >/dev/null 2>&1 || true
+    fi
+    rm -f "$NEW"
+    ;;
+  *) sed -n '2,8p' "$0"; exit 1 ;;
 esac
