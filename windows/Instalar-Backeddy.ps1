@@ -200,12 +200,56 @@ function Show-Form {
 }
 $cfg = Show-Form
 if ($null -eq $cfg) { exit }
-$Dir = "$($cfg.Drive):\Backeddy"
+$Dir = "$($cfg.Drive):\BackEddyVM"
 New-Item -ItemType Directory -Force -Path $Dir | Out-Null
 Log "pasta=$Dir tamanho=$($cfg.SizeGB)GB"
 
+# ---------- Janela única: progresso → ejetar o pendrive → esperar o servidor ----------
+$w = New-Object Windows.Forms.Form
+$w.Text = "Backeddy Server"; $w.ClientSize = New-Object Drawing.Size(500, 250); $w.StartPosition = "CenterScreen"
+$w.FormBorderStyle = "FixedDialog"; $w.MaximizeBox = $false; $w.MinimizeBox = $true; $w.ControlBox = $false
+$w.Font = New-Object Drawing.Font("Segoe UI", 10)
+$wt = New-Object Windows.Forms.Label; $wt.Location = New-Object Drawing.Point(20, 16); $wt.Size = New-Object Drawing.Size(460, 26)
+$wt.Font = New-Object Drawing.Font("Segoe UI", 12, [Drawing.FontStyle]::Bold); $wt.Text = "Instalando o Backeddy Server"
+$w.Controls.Add($wt)
+$StepNames = @("Baixando o pendrive", "Preparando o pendrive", "Criando os discos", "Criando e ligando a máquina virtual")
+$StepLabels = @()
+for ($i = 0; $i -lt $StepNames.Count; $i++) {
+    $l = New-Object Windows.Forms.Label; $l.Location = New-Object Drawing.Point(28, (56 + $i * 28)); $l.Size = New-Object Drawing.Size(450, 24)
+    $l.Text = "○   " + $StepNames[$i]; $l.ForeColor = [Drawing.Color]::Gray
+    $w.Controls.Add($l); $StepLabels += $l
+}
+$wd = New-Object Windows.Forms.Label; $wd.Location = New-Object Drawing.Point(28, 176); $wd.Size = New-Object Drawing.Size(450, 24)
+$wd.ForeColor = [Drawing.Color]::DimGray; $w.Controls.Add($wd)
+$wl = New-Object Windows.Forms.Label; $wl.Location = New-Object Drawing.Point(20, 52); $wl.Size = New-Object Drawing.Size(460, 130); $wl.Visible = $false
+$w.Controls.Add($wl)
+$w.Show(); [Windows.Forms.Application]::DoEvents()
+
+function Pump { [Windows.Forms.Application]::DoEvents() }
+function Step([int]$n, [string]$detalhe = "") {
+    for ($i = 0; $i -lt $StepLabels.Count; $i++) {
+        if ($i -lt $n) { $StepLabels[$i].Text = "✓   " + $StepNames[$i]; $StepLabels[$i].ForeColor = [Drawing.Color]::SeaGreen; $StepLabels[$i].Font = $w.Font }
+        elseif ($i -eq $n) { $StepLabels[$i].Text = "›   " + $StepNames[$i] + "…"; $StepLabels[$i].ForeColor = [Drawing.Color]::Black; $StepLabels[$i].Font = New-Object Drawing.Font("Segoe UI", 10, [Drawing.FontStyle]::Bold) }
+    }
+    $wd.Text = $detalhe; Pump
+}
+function MB([int64]$b) { return [math]::Round($b / 1MB) }
+# cópia em pedaços, para a janela não "congelar" com um arquivo de 1 GB
+function Copy-WithProgress([string]$src, [string]$dst) {
+    $in = [IO.File]::OpenRead($src); $out = [IO.File]::Create($dst)
+    try {
+        $buf = New-Object byte[] (8MB); $done = 0; $total = $in.Length
+        while (($n = $in.Read($buf, 0, $buf.Length)) -gt 0) {
+            $out.Write($buf, 0, $n); $done += $n
+            $wd.Text = "$(MB $done) de $(MB $total) MB"; Pump
+        }
+    } finally { $in.Close(); $out.Close() }
+}
+
 # ---------- 3. Pendrive virtual (a imagem do instalador) ----------
 $Ext = if ($Motor -eq "hyperv") { "vhdx" } else { "vdi" }
+$Usb = Join-Path $Dir "pendrive.$Ext"
+Step 0 "Procurando a versão mais recente…"
 if (-not $Imagem) {
     try {
         $rel = Invoke-RestMethod -UseBasicParsing "https://api.github.com/repos/BackEddy/server/releases/latest"
@@ -213,11 +257,22 @@ if (-not $Imagem) {
         if ($null -eq $asset) { throw "a versão $($rel.tag_name) não tem o pendrive em .$Ext" }
         $dl = Join-Path $Dir $asset.name
         Log "baixando $($asset.browser_download_url)"
-        $ProgressPreference = "SilentlyContinue"
-        Invoke-WebRequest -UseBasicParsing $asset.browser_download_url -OutFile $dl
-        $Imagem = $dl
+        [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+        $wc = New-Object Net.WebClient
+        $task = $wc.DownloadFileTaskAsync($asset.browser_download_url, $dl)
+        while (-not $task.IsCompleted) {
+            $got = if (Test-Path $dl) { (Get-Item $dl).Length } else { 0 }
+            $pct = if ($asset.size) { [math]::Floor(100 * $got / $asset.size) } else { 0 }
+            $wd.Text = "$($rel.tag_name): $(MB $got) de $(MB $asset.size) MB ($pct%)"; Pump
+            Start-Sleep -Milliseconds 200
+        }
+        if ($task.IsFaulted) { throw $task.Exception.InnerException }
+        if ((Get-Item $dl).Length -ne $asset.size) { throw "download incompleto" }
+        Step 1
+        Move-Item -Force $dl $Usb    # baixado só para isto: vira o pendrive direto
     } catch {
         Log "download: $_"
+        if ($dl) { Remove-Item -Force $dl -ErrorAction SilentlyContinue }
         $ofd = New-Object Windows.Forms.OpenFileDialog
         $ofd.Title = "Não deu para baixar. Escolha o arquivo backeddy-server-X.$Ext (o pendrive)"
         $ofd.Filter = "Pendrive do Backeddy (*.$Ext)|*.$Ext|Todos (*.*)|*.*"
@@ -225,12 +280,15 @@ if (-not $Imagem) {
         $Imagem = $ofd.FileName
     }
 }
-if (-not (Test-Path $Imagem)) { Falha "Imagem não encontrada: $Imagem" }
-$Usb = Join-Path $Dir "pendrive.$Ext"
-Copy-Item -Force $Imagem $Usb      # cópia: a original fica intacta para reinstalar
-Log "pendrive: $Usb (de $Imagem)"
+if ($Imagem) {
+    if (-not (Test-Path $Imagem)) { Falha "Imagem não encontrada: $Imagem" }
+    Step 1
+    Copy-WithProgress $Imagem $Usb      # cópia: a original fica intacta para reinstalar
+}
+Log "pendrive: $Usb"
 
 # ---------- 4. Discos: sistema (24 GB) e backups ----------
+Step 2 "Sistema: 24 GB · Backups: $($cfg.SizeGB) GB (ocupam espaço aos poucos)"
 $Sys = Join-Path $Dir "sistema.$Ext"
 $Data = Join-Path $Dir "backups.$Ext"
 foreach ($pair in @(@($Sys, 24), @($Data, $cfg.SizeGB))) {
@@ -240,6 +298,7 @@ foreach ($pair in @(@($Sys, 24), @($Data, $cfg.SizeGB))) {
 }
 
 # ---------- 5. Máquina virtual ----------
+Step 3
 if ($Motor -eq "hyperv") {
     $sw = Get-VMSwitch -SwitchType External -ErrorAction SilentlyContinue | Select-Object -First 1
     if ($null -eq $sw) {
@@ -290,26 +349,28 @@ function Eject-Usb {
     else { VBM storageattach $VmName --storagectl SATA --port 0 --device 0 --medium none | Out-Null }
     Log "pendrive ejetado"
 }
-$w = New-Object Windows.Forms.Form
-$w.Text = "Backeddy Server"; $w.Size = New-Object Drawing.Size(500, 260); $w.StartPosition = "CenterScreen"
-$w.FormBorderStyle = "FixedDialog"; $w.MaximizeBox = $false; $w.TopMost = $true; $w.Font = New-Object Drawing.Font("Segoe UI", 10)
-$wl = New-Object Windows.Forms.Label; $wl.Location = New-Object Drawing.Point(20, 18); $wl.Size = New-Object Drawing.Size(450, 130)
+# a mesma janela do progresso troca de conteúdo
+foreach ($l in $StepLabels) { $l.Visible = $false }
+$wd.Visible = $false
+$wt.Text = "Agora, na tela da máquina virtual"
 $wl.Text = "1. Faça a instalação na janela da máquina virtual (nome, senha, discos).`n`n" +
     "2. Quando aparecer ""Pronto! Retire o pendrive"", volte aqui e clique em Ejetar pendrive. A máquina virtual reinicia sozinha.`n`n" +
     "Esta janela fica por cima das outras para você não perder."
-$w.Controls.Add($wl)
-$be = New-Object Windows.Forms.Button; $be.Text = "Ejetar pendrive"; $be.Location = New-Object Drawing.Point(230, 170); $be.Size = New-Object Drawing.Size(130, 34)
-$bc = New-Object Windows.Forms.Button; $bc.Text = "Abrir a tela da VM"; $bc.Location = New-Object Drawing.Point(20, 170); $bc.Size = New-Object Drawing.Size(150, 34)
-$bx = New-Object Windows.Forms.Button; $bx.Text = "Cancelar"; $bx.Location = New-Object Drawing.Point(370, 170); $bx.Size = New-Object Drawing.Size(95, 34)
+$wl.Visible = $true
+$be = New-Object Windows.Forms.Button; $be.Text = "Ejetar pendrive"; $be.Location = New-Object Drawing.Point(235, 200); $be.Size = New-Object Drawing.Size(140, 34)
+$bc = New-Object Windows.Forms.Button; $bc.Text = "Abrir a tela da VM"; $bc.Location = New-Object Drawing.Point(20, 200); $bc.Size = New-Object Drawing.Size(160, 34)
+$bx = New-Object Windows.Forms.Button; $bx.Text = "Cancelar"; $bx.Location = New-Object Drawing.Point(385, 200); $bx.Size = New-Object Drawing.Size(95, 34)
 $w.Controls.AddRange(@($be, $bc, $bx))
 $be.Add_Click({
     $r = Msg "A tela da máquina virtual já mostra ""Pronto!""?" "Backeddy Server" "Question" "YesNo"
-    if ($r -eq "Yes") { try { Eject-Usb; $w.Tag = "ok"; $w.Close() } catch { Msg "Não deu para ejetar: $($_.Exception.Message)" | Out-Null } }
+    if ($r -eq "Yes") { try { Eject-Usb; $w.Tag = "ok" } catch { Msg "Não deu para ejetar: $($_.Exception.Message)" | Out-Null } }
 })
 $bc.Add_Click({ if ($Motor -eq "hyperv") { Start-Process vmconnect.exe -ArgumentList "localhost", "`"$VmName`"" } else { & $VBox startvm $VmName --type separate 2>$null } })
-$bx.Add_Click({ $w.Tag = "cancel"; $w.Close() })
-[void]$w.ShowDialog()
+$bx.Add_Click({ $w.Tag = "cancel" })
+$w.TopMost = $true; $w.Activate()
+while (-not $w.Tag) { Pump; Start-Sleep -Milliseconds 50 }
 if ($w.Tag -ne "ok") {
+    $w.Close()
     Msg "Instalação interrompida. A máquina virtual ""$VmName"" continua criada; para recomeçar, apague-a e rode este instalador de novo." | Out-Null
     exit
 }
@@ -331,11 +392,10 @@ function Find-VmIp {
     }
     return $null
 }
-$wait = New-Object Windows.Forms.Form
-$wait.Text = "Backeddy Server"; $wait.Size = New-Object Drawing.Size(460, 160); $wait.StartPosition = "CenterScreen"
-$wait.FormBorderStyle = "FixedDialog"; $wait.ControlBox = $false; $wait.Font = New-Object Drawing.Font("Segoe UI", 10)
-$wl2 = New-Object Windows.Forms.Label; $wl2.Location = New-Object Drawing.Point(20, 20); $wl2.Size = New-Object Drawing.Size(410, 80)
-$wl2.Text = "Preparando o servidor (uns 5 minutos)…"; $wait.Controls.Add($wl2); $wait.Show(); [Windows.Forms.Application]::DoEvents()
+foreach ($b in @($be, $bc, $bx)) { $b.Visible = $false }
+$w.TopMost = $false
+$wt.Text = "Preparando o servidor"
+$wl2 = $wl; $wl2.Text = "Preparando o servidor (uns 5 minutos)…"; Pump
 $ip = $null; $hello = $null; $t0 = Get-Date
 while (((Get-Date) - $t0).TotalMinutes -lt 20) {
     $min = [math]::Floor(((Get-Date) - $t0).TotalMinutes)
@@ -346,7 +406,7 @@ while (((Get-Date) - $t0).TotalMinutes -lt 20) {
     } else { $wl2.Text = "Preparando o servidor (uns 5 minutos)… · $min min" }
     [Windows.Forms.Application]::DoEvents(); Start-Sleep -Seconds 5
 }
-$wait.Close()
+$w.Close()
 $ready = $null -ne $hello -and $hello.slug
 Log "pronto=$ready ip=$ip nome=$($hello.name)"
 

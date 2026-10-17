@@ -1,4 +1,4 @@
-# Testando o Backeddy em VM no Windows (0.6.3)
+# Testando o Backeddy em VM no Windows (0.6.4)
 
 Para quem já tem um PC/servidor com Windows ligado o tempo todo. O instalador cria uma máquina
 virtual que dá partida pelo "pendrive virtual" (a mesma imagem do pendrive de verdade). A instalação
@@ -24,6 +24,8 @@ vezes no .cmd e escolha o arquivo quando ele pedir).
 
 - [ ] Checa a BIOS e o Hyper-V (liga com 1 reinício, ou usa o VirtualBox)
 - [ ] Janela pequena: só a unidade e o tamanho do disco de backup (mínimo 40 GB)
+- [ ] A janela continua aberta mostrando as etapas (baixando com MB e %, pendrive, discos, VM) e cria `X:\BackEddyVM`
+- [ ] A mesma janela vira a de **Ejetar pendrive** e, depois, a de "Preparando o servidor"
 - [ ] A VM liga e a tela dela abre sozinha no instalador gráfico (mouse funciona)
 - [ ] No instalador: cartão **"Disco de backup da máquina virtual"** (verde, sem aviso de risco),
       APAGAR, nome, senha, **silêncio à noite** (sem teste de bipe: quem bipa é o Windows)
@@ -41,5 +43,5 @@ vezes no .cmd e escolha o arquivo quando ele pedir).
 ## Desfazer
 
 Hyper-V: `Stop-VM "Backeddy Server" -TurnOff; Remove-VM "Backeddy Server" -Force` e apague a pasta
-`X:\Backeddy`. VirtualBox: apague a VM e a tarefa "Backeddy Server (VirtualBox)".
+`X:\BackEddyVM`. VirtualBox: apague a VM e a tarefa "Backeddy Server (VirtualBox)".
 Vigia: apague a tarefa "Backeddy Vigia" e a pasta `C:\ProgramData\Backeddy`.

@@ -216,6 +216,11 @@ via QR); x86 64 bits apenas (Debian 13 sem i386; Kopia sem binário 32 bits).
 Requisitos: x86 64 bits; 512 MB–1 GB (recomendado 2 GB); sistema 16 GB; rede Gigabit recomendada;
 HDs CMR (evitar SMR); notebook é ótimo (8–15 W, bateria = nobreak).
 
+### 0.6.4 — janela única no instalador do Windows (17/10/2026)
+- O .exe não some depois de escolher disco e tamanho: uma janela só mostra as etapas (download com MB/% via
+  WebClient.DownloadFileTaskAsync, cópia em pedaços), vira a de Ejetar pendrive e depois a de "Preparando o servidor".
+- Pasta da VM no disco escolhido: `X:\BackEddyVM` (antes `X:\Backeddy`). O download vira o pendrive.vhdx direto (Move).
+
 ## Pendências gerais
 - Teste real de backup do Time Machine e de um PC no Kopia (ainda não feitos, por opção).
 - Alertas do servidor (lacuna conhecida).
