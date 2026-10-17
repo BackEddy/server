@@ -158,6 +158,22 @@ via QR); x86 64 bits apenas (Debian 13 sem i386; Kopia sem binário 32 bits).
   se o disco antigo existir); `backeddy mirror`/`unmirror` + recálculo do limite do Time Machine.
   Testes: matriz de discos, Manual, recuperação, SMART, lsblk e roteiros completos do instalador (flow_test.go).
 
+### 0.6.0 (17/10/2026, escrita em passos curtos, falta build e teste)
+- Passo a passo combinado com o Eddy (tokens curtos): 1 APAGAR no campo; 2 divisão automática do espaço
+  (backeddy space + timer de hora em hora: TM = útil − Kopia − folga 10%/20 GB, piso 20%; sem a tela
+  "Quem vai fazer backup"); 3 vigia em Go (agent/: backeddy check a cada minuto, bipe pcspkr 3x/min,
+  qualquer tecla no servidor reconhece por 1 dia, backeddy ack/alerts/quiet, silêncio 22–8);
+  4 painel web na porta 80 (senha = hash NT do Samba via pdbedit; reconhecer 1/3/7 dias; silêncio;
+  Bonjour _backeddy._tcp); 5 teste do alarme + silêncio no instalador; 6 imagem pronta de VM no CI
+  (-vm.vhdx e -vm.vdi; disquinho FAT BACKEDDYCFG com firstboot.env; DISKS=auto; admin e chaves SSH no
+  1º boot; hyperv-daemons para o IP); 7 windows/Instalar-Backeddy.ps1 (checa BIOS, Hyper-V liga com 1
+  reinício ou cai no VirtualBox; uma janela: nome, senha, unidade, tamanho, silêncio; cria switch em
+  ponte se faltar; VM 512 MB, Gen2, Secure Boot, liga/desliga com o Windows); 8 caminho VirtualBox
+  (instala VC++ e VirtualBox em silêncio, ponte, SATA, tarefa agendada para ligar; limitação: Windows
+  desligando corta a VM); 9 vigia na bandeja do Windows (/api/beep sem senha, bipa e avisa).
+- Decisões: descartado "Faça tudo por mim"; teste de backup real e de hardware com um amigo que já tem
+  servidor Windows (usa o instalador de VM).
+
 ### Plano de construção
 | Fase | Conteúdo | Situação |
 | --- | --- | --- |

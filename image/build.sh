@@ -50,7 +50,7 @@ log "1/3 Sistema do servidor"
 TARGET_PKGS="linux-image-amd64,systemd-sysv,systemd-resolved,udev,kmod,dbus,sudo,openssh-server,\
 samba,avahi-daemon,smartmontools,unattended-upgrades,btrfs-progs,curl,ca-certificates,gnupg,openssl,kopia,\
 grub-efi-amd64-bin,grub-efi-amd64-signed,shim-signed,grub2-common,efibootmgr,\
-locales,console-setup,kbd,iproute2,iputils-ping,less,nano,wget,zstd,$FIRMWARE"
+locales,console-setup,kbd,iproute2,iputils-ping,less,nano,wget,zstd,hyperv-daemons,$FIRMWARE"
 mmdebstrap --variant=important --include="$TARGET_PKGS" \
   --setup-hook='mkdir -p "$1/usr/share/keyrings" && cp "$KOPIA_KEY" "$1/usr/share/keyrings/"' \
   --customize-hook='bash "$REPO/image/customize-target.sh" "$1"' \
@@ -117,8 +117,56 @@ put "$W/esp.vfat"  "$(start 1)"
 put "$W/root.ext4" "$(start 2)"
 put "$W/plan.vfat" "$(start 3)"
 
-log "Formatos de saída"
+log "Formatos de saída (pendrive)"
 qemu-img convert -f raw -O vhdx -o subformat=dynamic "$IMG" "$OUT/$NAME.vhdx"
 xz -T0 -6 "$IMG"   # .img.xz: o balenaEtcher grava direto
+
+# ---------- Imagem pronta de máquina virtual (Hyper-V / VirtualBox) ----------
+# O sistema do servidor já instalado: o instalador do Windows só cria a VM, um disco de backup
+# e um disquinho de configuração (BACKEDDYCFG, com nome e senha) lido no primeiro boot.
+log "Máquina virtual"
+VMROOT="$W/vmroot"
+mkdir -p "$VMROOT"
+tar --zstd --xattrs --xattrs-include='*' --numeric-owner -xpf "$W/rootfs.tar.zst" -C "$VMROOT"
+VKVER=$(basename "$(ls "$VMROOT"/boot/vmlinuz-* | sort -V | tail -1)" | sed 's/^vmlinuz-//')
+printf '# Backeddy Server (máquina virtual)\nLABEL=backeddy-root / ext4 errors=remount-ro 0 1\nLABEL=EFI /boot/efi vfat umask=0077,nofail 0 1\n' > "$VMROOT/etc/fstab"
+mkdir -p "$VMROOT/boot/efi" "$VMROOT/boot/grub"
+# menu inicial; o update-grub (atualizações de kernel) refaz este arquivo com a VM já rodando
+cat > "$VMROOT/boot/grub/grub.cfg" <<CFG
+set timeout=2
+set default=0
+menuentry "Backeddy Server" {
+  search --no-floppy --label backeddy-root --set=root
+  linux /boot/vmlinuz-$VKVER root=LABEL=backeddy-root ro quiet loglevel=3 systemd.ssh_auto=no
+  initrd /boot/initrd.img-$VKVER
+}
+CFG
+echo "VM=1" > "$VMROOT/etc/backeddy-vm"
+VESP="$W/vmesp"
+mkdir -p "$VESP/EFI/BOOT" "$VESP/EFI/debian"
+cp "$VMROOT/usr/lib/shim/shimx64.efi.signed" "$VESP/EFI/BOOT/BOOTX64.EFI"
+cp "$(ls "$VMROOT"/usr/lib/shim/mmx64.efi* | head -1)" "$VESP/EFI/BOOT/mmx64.efi"
+cp "$VMROOT/usr/lib/grub/x86_64-efi-signed/grubx64.efi.signed" "$VESP/EFI/BOOT/grubx64.efi"
+VSTUB='search --no-floppy --label backeddy-root --set=root
+set prefix=($root)/boot/grub
+configfile ($root)/boot/grub/grub.cfg'
+echo "$VSTUB" > "$VESP/EFI/debian/grub.cfg"
+echo "$VSTUB" > "$VESP/EFI/BOOT/grub.cfg"
+VESP_MB=256
+VROOT_MB=15872   # 15,5 GB para o sistema (a imagem só guarda o que está ocupado)
+mkfs.ext4 -q -F -L backeddy-root -d "$VMROOT" "$W/vmroot.ext4" "${VROOT_MB}M"
+mkfs.vfat -C -F 32 -n EFI "$W/vmesp.vfat" $((VESP_MB * 1024)) >/dev/null
+mcopy -s -i "$W/vmesp.vfat" "$VESP/EFI" ::/
+IMG="$W/vm.img"
+truncate -s $(( VESP_MB + VROOT_MB + 4 ))M "$IMG"
+sgdisk -Z \
+  -n1:0:+${VESP_MB}M -t1:ef00 -c1:EFI \
+  -n2:0:+${VROOT_MB}M -t2:8304 -c2:backeddy-root \
+  "$IMG" >/dev/null
+put "$W/vmesp.vfat"  "$(start 1)"
+put "$W/vmroot.ext4" "$(start 2)"
+qemu-img convert -f raw -O vhdx -o subformat=dynamic "$IMG" "$OUT/$NAME-vm.vhdx"   # Hyper-V
+qemu-img convert -f raw -O vdi "$IMG" "$OUT/$NAME-vm.vdi"                           # VirtualBox
+rm -f "$IMG" "$W/vmroot.ext4"
 ( cd "$OUT" && sha256sum ./* > SHA256SUMS )
 ls -lh "$OUT"

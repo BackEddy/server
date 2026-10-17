@@ -40,6 +40,7 @@ func serveWeb(addr string) {
 		_, _ = w.Write(indexHTML)
 	})
 	mux.HandleFunc("/api/login", apiLogin)
+	mux.HandleFunc("/api/beep", apiBeep) // sem senha: só diz se é hora de bipar (vigia do Windows)
 	mux.HandleFunc("/api/status", auth(apiStatus))
 	mux.HandleFunc("/api/ack", auth(apiAck))
 	mux.HandleFunc("/api/quiet", auth(apiQuiet))
@@ -173,6 +174,16 @@ func apiStatus(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(statusResp{Name: name, Alerts: p, Status: string(out), QuietStart: qs, QuietEnd: qe})
+}
+
+// apiBeep: o vigia do Windows (VM sem alto-falante) pergunta a cada minuto se deve bipar.
+// Não exige senha e não revela detalhes: só "sim/não" e quantos alertas.
+func apiBeep(w http.ResponseWriter, r *http.Request) {
+	mu.Lock()
+	n := len(pending)
+	mu.Unlock()
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]any{"beep": n > 0 && !quietNow(time.Now()), "alerts": n})
 }
 
 func apiAck(w http.ResponseWriter, r *http.Request) {

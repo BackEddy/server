@@ -2,7 +2,9 @@
 Description=Backeddy: primeiro boot (prepara os discos de backup, Samba e Kopia)
 After=network-online.target local-fs.target systemd-udev-settle.service
 Wants=network-online.target
-ConditionPathExists=/etc/backeddy/firstboot.env
+# pendrive: o instalador grava o firstboot.env; máquina virtual: vem no disquinho BACKEDDYCFG
+ConditionPathExists=|/etc/backeddy/firstboot.env
+ConditionPathExists=|/etc/backeddy-vm
 
 [Service]
 Type=oneshot

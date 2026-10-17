@@ -1,4 +1,4 @@
-# Testando a imagem do pendrive (0.5)
+# Testando a imagem do pendrive (0.6)
 
 A imagem é montada no GitHub Actions e testada no Hyper-V, sem pendrive: o arquivo `.vhdx`
 faz o papel do pendrive. Nesta versão: **só UEFI** (PCs de ~2012 para cá) e **só rede por cabo**.
@@ -12,7 +12,7 @@ faz o papel do pendrive. Nesta versão: **só UEFI** (PCs de ~2012 para cá) e *
    direita da linha) ou: `gh run download ID -R BackEddy/server -D B:\Backeddy`.
    Descompacte o `.vhdx` em `B:\Backeddy\`.
 
-Publicar uma tag (`git tag v0.5.0 && git push --tags`) faz o mesmo e anexa os arquivos numa release.
+Publicar uma tag (`git tag v0.6.0 && git push --tags`) faz o mesmo e anexa os arquivos numa release.
 
 ## 2. Criar uma VM de teste "PC largado"
 
@@ -22,7 +22,7 @@ PowerShell como Administrador. Se já existir a VM de teste anterior, apague ant
 ```powershell
 $vm     = "Backeddy-Teste-Pendrive"
 $pasta  = "B:\Backeddy\teste-pendrive"
-$vhdx   = "B:\Backeddy\backeddy-server-0.5.0.vhdx"
+$vhdx   = "B:\Backeddy\backeddy-server-0.6.0.vhdx"
 New-Item -ItemType Directory -Force -Path $pasta | Out-Null
 New-VM -Name $vm -Generation 2 -MemoryStartupBytes 1GB -SwitchName Bridge_Rede -Path $pasta -NoVHD
 Set-VMProcessor $vm -Count 2
@@ -52,7 +52,8 @@ Sem memória livre para 1 GB: use `-MemoryStartupBytes 512MB`.
 - [ ] Escolher **Mais espaço** → aviso amarelo "Sem proteção" com Voltar / Entendi
 - [ ] **Escolher os discos à mão**: cada disco com Sistema / Backup / Sistema + backup / Não usar,
       chave do espelho, resumo embaixo; combinação inválida não deixa continuar; Voltar volta
-- [ ] "Quem vai fazer backup aqui?" (Macs e PCs / Só Macs / Só PCs)
+- [ ] Campo de confirmação diz "Para confirmar, digite APAGAR:"
+- [ ] "Teste do alarme": no Hyper-V não há alto-falante → "Não ouvi" → aviso "Sem alto-falante"
 - [ ] Aviso vermelho com "Desligar" selecionado; digitar **APAGAR**; nome; senha duas vezes
 - [ ] Barra de progresso com o spinner girando; "Pronto!"
 
@@ -102,6 +103,15 @@ Start-VM $vm
 
 - [ ] `sudo backeddy unmirror` (digitar SEM ESPELHO): status mostra `[AVISO ] … sem espelho`, a tela continua verde
 - [ ] `sudo backeddy mirror`: volta para "Espelho de 2 discos"
+
+## 7. Painel, alertas e espaço (0.6)
+
+- [ ] Tela do servidor mostra "Painel: http://backup-da-casa.local"; no Mac, abrir e entrar com a senha
+- [ ] Painel: "Tudo certo", situação completa, horário de silêncio (mude e salve)
+- [ ] Provocar um alerta: `Stop-VM $vm -TurnOff`, tirar um dos HDs, ligar de novo; em ~3 min o painel
+      mostra "Falta um disco do espelho" e os botões Amanhã / 3 dias / 7 dias; reconhecer some com o alerta
+- [ ] `sudo backeddy alerts` lista o alerta como reconhecido; `sudo backeddy status` mostra quanto o
+      Time Machine pode crescer ("pode crescer até …") e quanto os PCs usam
 
 ## Se algo der errado
 

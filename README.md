@@ -4,7 +4,7 @@
 
 <p align="center"><b>Turn any old PC into a backup server for your Macs (Time Machine) and Windows PCs.</b></p>
 
-> **Status: early preview (0.5).** Two ways to install: the **USB installer image** (plug into an old PC, follow a graphical installer with mouse or keyboard, type a password, done — UEFI and wired network only for now) or the **install script** on a fresh Debian. Soon the Backeddy app will create the USB stick for you.
+> **Status: early preview (0.6).** Two ways to install: the **USB installer image** (plug into an old PC, follow a graphical installer with mouse or keyboard, type a password, done — UEFI and wired network only for now) or the **install script** on a fresh Debian. Soon the Backeddy app will create the USB stick for you.
 
 ## What it sets up
 
@@ -13,6 +13,9 @@
 - One or more **dedicated backup disks** (btrfs: checksums, compression). **Two or more are mirrored** by default; if one dies, backups keep running and `backeddy replace-disk` rebuilds the mirror. The installer also offers *More space* (disks summed) and *Everything together*, or picking each disk's role by hand — each choice shows its space and its risk. `backeddy mirror` / `unmirror` switch later without reinstalling.
 - **Recover**: the configuration is kept on the backup disks, so if the system disk dies, the USB stick reinstalls the system and the Macs and PCs carry on where they left off.
 - The installer checks **disk health (SMART)** and leaves failing disks out.
+- **Alerts**: when something is wrong (dead mirror disk, failing disk, backups stopped, disk full, a Mac without backups for 7 days) the server **beeps every minute** until someone acknowledges it — in the web panel (`http://name.local`), a key on the server's keyboard, or `backeddy ack`; quiet hours at night.
+- **Space is shared automatically**: PCs use what they need; Time Machine gets the rest (minus headroom), recalculated hourly.
+- **Already have a Windows server/NAS?** `windows/Instalar Backeddy.cmd` creates a ready Backeddy VM (Hyper-V, or VirtualBox on Windows Home) — nothing gets formatted — and a tray watcher that beeps on the Windows side.
 - **Never sleeps** (laptop lid closed is fine), **automatic security updates**, **SMART disk monitoring**.
 - The server's own screen shows its health and how to connect (Mac, Windows, SSH), always up to date.
 - `backeddy status` / `add-pc` / `passwd` / `replace-disk` / `add-disk` helper.
