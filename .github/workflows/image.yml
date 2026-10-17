@@ -39,3 +39,46 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: out/*
+
+  windows:
+    # o instalador do Windows vira um .exe único (com o vigia embutido), montado numa máquina Windows do GitHub
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Montar o Instalar-Backeddy.exe
+        shell: powershell
+        run: |
+          $ErrorActionPreference = "Stop"
+          Install-PackageProvider -Name NuGet -Force -Scope CurrentUser | Out-Null
+          Install-Module ps2exe -Force -Scope CurrentUser
+          $ver = (Get-Content VERSION -Raw).Trim()
+          $vig = Get-Content -Raw -Encoding UTF8 windows/Backeddy-Vigia.ps1
+          if ($vig -match "(?m)^'@") { throw "o vigia não pode ter uma linha começando com '@" }
+          $lines = Get-Content -Encoding UTF8 windows/Instalar-Backeddy.ps1
+          $out = foreach ($l in $lines) {
+            if ($l.StartsWith("# @@VIGIA@@")) { "`$VigiaScript = @'"; $vig.TrimEnd(); "'@" } else { $l }
+          }
+          New-Item -ItemType Directory -Force out | Out-Null
+          $out | Set-Content -Encoding UTF8 out/Instalar-Backeddy.ps1
+          $err = $null
+          [void][Management.Automation.Language.Parser]::ParseFile((Resolve-Path out/Instalar-Backeddy.ps1), [ref]$null, [ref]$err)
+          if ($err) { $err; throw "script combinado com erro de sintaxe" }
+          Invoke-ps2exe -inputFile out/Instalar-Backeddy.ps1 -outputFile out/Instalar-Backeddy.exe `
+            -noConsole -requireAdmin -STA -title "Instalar o Backeddy Server" -product "Backeddy Server" `
+            -company "Eddy Antonini" -copyright "MIT" -version "$ver.0"
+          Remove-Item out/Instalar-Backeddy.ps1
+          Get-ChildItem out
+
+      - name: Guardar como artefato
+        uses: actions/upload-artifact@v4
+        with:
+          name: backeddy-windows
+          path: out/Instalar-Backeddy.exe
+          retention-days: 14
+
+      - name: Publicar na release (tags v*)
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: out/Instalar-Backeddy.exe

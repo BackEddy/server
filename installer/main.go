@@ -12,6 +12,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -425,15 +426,35 @@ func askQuiet(ui Frontend, intro string) (bool, int, int) {
 	c, _ := ui.Cards("Silêncio à noite", []string{intro}, []Card{
 		{Title: "Sem bipe das 22h às 8h", Desc: "Durante a noite o aviso espera; o bipe volta de manhã.", Plain: true, Recommended: true},
 		{Title: "Sem bipe das 23h às 7h", Desc: "Uma noite um pouco mais curta.", Plain: true},
+		{Title: "Escolher o horário", Desc: "Você digita a hora de começar e de terminar o silêncio.", Plain: true},
 		{Title: "Bipar a qualquer hora", Desc: "Para quem prefere saber na hora, mesmo de madrugada.", Plain: true},
 	}, 0, []string{"Continuar"})
 	switch c {
 	case 1:
 		return true, 23, 7
 	case 2:
+		s := askHour(ui, "Começo do silêncio", "A partir de que hora o servidor fica quieto? (0 a 23)", "22")
+		e := askHour(ui, "Fim do silêncio", "A que horas o bipe pode voltar? (0 a 23)", "8")
+		if s == e {
+			return true, -1, -1
+		}
+		return true, s, e
+	case 3:
 		return true, -1, -1
 	}
 	return true, 22, 8
+}
+
+// askHour pede uma hora cheia de 0 a 23.
+func askHour(ui Frontend, title, text, def string) int {
+	lines := []string{text}
+	for {
+		v := strings.TrimSpace(strings.TrimSuffix(strings.ToLower(ui.Input(title, lines, "Hora:", def, false)), "h"))
+		if n, err := strconv.Atoi(v); err == nil && n >= 0 && n <= 23 {
+			return n
+		}
+		lines = []string{text, "", "!Digite só o número da hora, de 0 a 23 (ex.: 22)."}
+	}
 }
 
 func askPassword(ui Frontend, recover bool) string {

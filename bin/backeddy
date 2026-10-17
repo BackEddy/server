@@ -91,7 +91,12 @@ case "${1:-status}" in
         MARK=$I_OK
         case "$PROF" in
           RAID1*) LAYOUT="Espelho de $NDEV discos" ;;
-          *) LAYOUT="$NDEV disco(s), sem espelho: se um disco morrer, perde o histórico"; MARK=$I_WARN ;;
+          *)
+            if [ "$NDEV" -eq 1 ] && systemd-detect-virt -q 2>/dev/null; then
+              LAYOUT="Disco da máquina virtual (a proteção contra disco quebrado é a dos discos do Windows)"
+            else
+              LAYOUT="$NDEV disco(s), sem espelho: se um disco morrer, perde o histórico"; MARK=$I_WARN
+            fi ;;
         esac
         if [ "$MISSING" -gt 0 ]; then
           echo "$I_BAD Espelho DEGRADADO: falta um disco. Os backups continuam, mas sem proteção."

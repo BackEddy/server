@@ -1,10 +1,17 @@
-# Testando o Backeddy em VM no Windows (0.6.1)
+# Testando o Backeddy em VM no Windows (0.6.3)
 
 Para quem já tem um PC/servidor com Windows ligado o tempo todo. O instalador cria uma máquina
 virtual que dá partida pelo "pendrive virtual" (a mesma imagem do pendrive de verdade). A instalação
 é a mesma do pendrive, na tela da VM. Nada no Windows é formatado.
 
-## 1. Preparar
+## 0. Jeito final (um arquivo só)
+
+Baixe o **Instalar-Backeddy.exe** da última release (github.com/BackEddy/server/releases) e dê dois
+cliques. Ele pede administrador, baixa sozinho o pendrive virtual e segue o roteiro abaixo.
+O Windows pode avisar "O Windows protegeu o computador" (o .exe ainda não é assinado):
+"Mais informações" › "Executar assim mesmo".
+
+## 1. Preparar (jeito de desenvolvimento, sem release)
 
 1. Rode o workflow **Imagem do pendrive** e baixe o artefato `backeddy-server-imagem`.
    Vêm o `backeddy-server-0.6.1.vhdx` (Hyper-V) e o `backeddy-server-0.6.1.vdi` (VirtualBox).

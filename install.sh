@@ -21,7 +21,7 @@
 # Pode ser rodado de novo com segurança: reaplica as configurações.
 set -euo pipefail
 
-VERSION="0.6.2"
+VERSION="0.6.3"
 NAME="Backup da Casa"
 DISKS=()
 MIRROR=1

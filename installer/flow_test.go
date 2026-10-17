@@ -107,7 +107,7 @@ var tail = []answer{
 	{title: "Atenção"}, {title: "Confirme", input: "APAGAR"},
 	{title: "Nome"},
 	{title: "Senha", input: "segredo1"}, {title: "Senha", input: "segredo1"},
-	{title: "Teste do alarme", choose: 1}, {title: "Teste do alarme", choose: 0}, {title: "Silêncio", card: 2},
+	{title: "Teste do alarme", choose: 1}, {title: "Teste do alarme", choose: 0}, {title: "Silêncio", card: 2}, {title: "Começo", input: "23h"}, {title: "Fim", input: "x"}, {title: "Fim", input: "7"},
 	{title: "Pronto"},
 }
 

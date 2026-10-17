@@ -20,6 +20,14 @@ $Base = Join-Path $env:ProgramData "Backeddy"
 $Log = Join-Path $Base "instalador.log"
 $VmName = "Backeddy Server"
 New-Item -ItemType Directory -Force -Path $Base | Out-Null
+# rodando como .exe (gerado no GitHub) ou como script .ps1
+$IsExe = [Diagnostics.Process]::GetCurrentProcess().ProcessName -notmatch '^(powershell|pwsh)$'
+$SelfPath = if ($IsExe) { [Diagnostics.Process]::GetCurrentProcess().MainModule.FileName } else { $PSCommandPath }
+# @@VIGIA@@  (no .exe, o GitHub troca esta linha pelo vigia embutido: $VigiaScript = @'...'@)
+if (-not $VigiaScript -and -not $IsExe) {
+    $vf = Join-Path $PSScriptRoot "Backeddy-Vigia.ps1"
+    if (Test-Path $vf) { $VigiaScript = Get-Content -Raw -Encoding UTF8 $vf }
+}
 
 function Log([string]$m) { Add-Content -Path $Log -Value ("{0:yyyy-MM-dd HH:mm:ss} {1}" -f (Get-Date), $m) }
 
@@ -39,9 +47,14 @@ function Falha([string]$texto) {
 # ---------- administrador ----------
 $id = [Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()
 if (-not $id.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
-    $a = @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "`"$PSCommandPath`"")
-    if ($Imagem) { $a += @("-Imagem", "`"$Imagem`"") }
-    Start-Process powershell -Verb RunAs -ArgumentList $a
+    if ($IsExe) {
+        $a = @(); if ($Imagem) { $a += @("-Imagem", "`"$Imagem`"") }
+        if ($a.Count) { Start-Process $SelfPath -Verb RunAs -ArgumentList $a } else { Start-Process $SelfPath -Verb RunAs }
+    } else {
+        $a = @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "`"$PSCommandPath`"")
+        if ($Imagem) { $a += @("-Imagem", "`"$Imagem`"") }
+        Start-Process powershell -Verb RunAs -ArgumentList $a
+    }
     exit
 }
 Log "== início (Continuar=$Continuar)"
@@ -77,10 +90,16 @@ if ($hv -eq "Enabled") {
     if ($r -eq "Cancel") { exit }
     if ($r -eq "Yes") {
         try {
-            $self = Join-Path $Base "Instalar-Backeddy.ps1"
-            Copy-Item -Force $PSCommandPath $self
-            Copy-Item -Force (Join-Path $PSScriptRoot "Backeddy-Vigia.ps1") $Base -ErrorAction SilentlyContinue
-            $cmd = "powershell -NoProfile -ExecutionPolicy Bypass -File `"$self`" -Continuar"
+            if ($IsExe) {
+                $self = Join-Path $Base "Instalar-Backeddy.exe"
+                Copy-Item -Force $SelfPath $self
+                $cmd = "`"$self`" -Continuar"
+            } else {
+                $self = Join-Path $Base "Instalar-Backeddy.ps1"
+                Copy-Item -Force $PSCommandPath $self
+                Copy-Item -Force (Join-Path $PSScriptRoot "Backeddy-Vigia.ps1") $Base -ErrorAction SilentlyContinue
+                $cmd = "powershell -NoProfile -ExecutionPolicy Bypass -File `"$self`" -Continuar"
+            }
             if ($Imagem) { $cmd += " -Imagem `"$Imagem`"" }
             Enable-WindowsOptionalFeature -Online -FeatureName Microsoft-Hyper-V -All -NoRestart | Out-Null
             Enable-WindowsOptionalFeature -Online -FeatureName Microsoft-Hyper-V-Management-PowerShell -All -NoRestart -ErrorAction SilentlyContinue | Out-Null
@@ -334,12 +353,13 @@ Log "pronto=$ready ip=$ip nome=$($hello.name)"
 # ---------- 8. Vigia no Windows: bipa e avisa quando a VM tiver alerta (a VM não tem alto-falante) ----------
 if ($ready) {
     try {
-        $vsrc = Join-Path $PSScriptRoot "Backeddy-Vigia.ps1"
-        if (-not (Test-Path $vsrc)) { $vsrc = Join-Path $Base "Backeddy-Vigia.ps1" }
         $vdst = Join-Path $Base "Backeddy-Vigia.ps1"
-        if ($vsrc -ne $vdst) { Copy-Item -Force $vsrc $vdst }
+        if (-not $VigiaScript -and (Test-Path $vdst)) { $VigiaScript = Get-Content -Raw -Encoding UTF8 $vdst }
+        if (-not $VigiaScript) { throw "vigia não encontrado" }
+        [IO.File]::WriteAllText($vdst, $VigiaScript, (New-Object Text.UTF8Encoding($true)))
         @{ host = "$($hello.slug).local"; ip = "$ip" } | ConvertTo-Json | Set-Content -Encoding UTF8 (Join-Path $Base "vigia.json")
-        $va = New-ScheduledTaskAction -Execute "powershell.exe" -Argument "-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File `"$vdst`""
+        # conhost --headless: sem janela nenhuma (no Windows 11, o -WindowStyle Hidden ainda mostra o Terminal vazio)
+        $va = New-ScheduledTaskAction -Execute "conhost.exe" -Argument "--headless powershell.exe -NoProfile -ExecutionPolicy Bypass -File `"$vdst`""
         $vt = New-ScheduledTaskTrigger -AtLogOn -User "$env:USERDOMAIN\$env:USERNAME"
         $vp = New-ScheduledTaskPrincipal -UserId "$env:USERDOMAIN\$env:USERNAME" -LogonType Interactive -RunLevel Limited
         $vs = New-ScheduledTaskSettingsSet -ExecutionTimeLimit ([TimeSpan]::Zero) -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries

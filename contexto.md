@@ -193,6 +193,15 @@ via QR); x86 64 bits apenas (Debian 13 sem i386; Kopia sem binário 32 bits).
   do primeiro boot. Vigia agora After=network.target e o install.sh liga serviços novos com --no-block.
 - Próxima rodada: silêncio à noite com horário digitado (instalador e painel); .exe único; releases.
 
+### 0.6.3 — .exe único e acabamentos (17/10/2026)
+- 0.6.2 aprovada no Hyper-V pelo instalador do Windows (VM pelo pendrive virtual, Ejetar, painel, vigia, Mac vê o TM).
+- Vigia iniciado com conhost --headless (no Windows 11 o -WindowStyle Hidden deixava um Terminal vazio).
+- Status na VM: "Disco da máquina virtual" em verde (systemd-detect-virt), sem o aviso de sem espelho.
+- Silêncio à noite: cartão "Escolher o horário" (digita início e fim, 0–23).
+- CI: job "windows" (windows-latest) embute o vigia no script e gera Instalar-Backeddy.exe com ps2exe
+  (-noConsole -requireAdmin); artefato backeddy-windows; em tag v*, release com .exe + pendrive (.vhdx/.vdi/.img.xz).
+  O .exe baixa sozinho o pendrive virtual da última release. Sem assinatura ainda (SmartScreen avisa).
+
 ### Plano de construção
 | Fase | Conteúdo | Situação |
 | --- | --- | --- |
