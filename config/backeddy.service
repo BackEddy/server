@@ -18,4 +18,13 @@
     <txt-record>sys=waMa=0,adVF=0x100</txt-record>
     <txt-record>dk0=adVN=TimeMachine,adVF=0x82</txt-record>
   </service>
+  <service>
+    <type>_backeddy._tcp</type>
+    <port>80</port>
+    <txt-record>api=1</txt-record>
+  </service>
+  <service>
+    <type>_http._tcp</type>
+    <port>80</port>
+  </service>
 </service-group>

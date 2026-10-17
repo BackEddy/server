@@ -8,6 +8,7 @@ mkdir -p "$R/opt/backeddy-server"
 cp -a "$REPO/install.sh" "$REPO/bin" "$REPO/config" "$REPO/LICENSE" "$REPO/VERSION" "$R/opt/backeddy-server/"
 install -m 0644 "$REPO/config/backeddy-firstboot.service" "$R/etc/systemd/system/backeddy-firstboot.service"
 install -m 0755 "$REPO/bin/backeddy" "$R/usr/local/bin/backeddy"
+install -m 0755 "$W/backeddy-agent" "$R/opt/backeddy-server/bin/backeddy-agent"   # compilado pelo build.sh
 
 # Rede por cabo: DHCP em qualquer placa
 mkdir -p "$R/etc/systemd/network"

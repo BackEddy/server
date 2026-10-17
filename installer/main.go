@@ -166,9 +166,6 @@ func run(ui Frontend, dry bool, fake, planFile string) error {
 			name = strings.TrimSpace(plan.Name)
 		}
 		in.Name = ui.Input("Nome do servidor", []string{"É o nome que vai aparecer no Mac e no Windows."}, "Nome:", name, false)
-		if plan == nil {
-			in.TMPercent = askWhoUses(ui)
-		}
 	}
 	in.Password = askPassword(ui, recover)
 
@@ -182,6 +179,9 @@ func run(ui Frontend, dry bool, fake, planFile string) error {
 			break
 		}
 	}
+
+	// 6b. Alarme: teste de bipe e silêncio à noite
+	in.BeepOK, in.QuietStart, in.QuietEnd = askAlarm(ui, dry)
 
 	// 7. Instalação
 	ui.Stage(StageInstall)
@@ -328,7 +328,7 @@ func redBarrier(ui Frontend, lines []string) bool {
 // typed pede uma palavra; SAIR desiste.
 func typed(ui Frontend, title string, lines []string, word string) bool {
 	for {
-		v := ui.Input(title, lines, "Digite:", "", false)
+		v := ui.Input(title, lines, "Para confirmar, digite "+word+":", "", false)
 		if v == word {
 			return true
 		}
@@ -388,13 +388,44 @@ func confirmErase(ui Frontend, l *Layout) bool {
 	return typed(ui, "Confirme que pode apagar", append([]string{"Último aviso. Discos que serão apagados:", ""}, dl...), "APAGAR")
 }
 
-func askWhoUses(ui Frontend) int {
-	c, _ := ui.Cards("Quem vai fazer backup aqui?", []string{"Assim o espaço é dividido do jeito certo. Dá para mudar depois."}, []Card{
-		{Title: "Macs e PCs", Desc: "60% do espaço para o Time Machine dos Macs, 40% para os PCs.", Plain: true},
-		{Title: "Só Macs", Desc: "85% do espaço para o Time Machine.", Plain: true},
-		{Title: "Só PCs com Windows", Desc: "90% do espaço para os PCs.", Plain: true},
+// askAlarm: o servidor bipa quando algo dá errado. Testa se o PC tem alto-falante e pergunta o silêncio à noite.
+func askAlarm(ui Frontend, dry bool) (bool, int, int) {
+	beepOK := false
+	for {
+		if !dry {
+			beepPattern()
+		}
+		c := ui.Choose("Teste do alarme", ToneNormal, []string{
+			"Quando algo der errado (um disco falhando, por exemplo), o servidor bipa a cada minuto até alguém ver o aviso.",
+			"",
+			"*Agora ele tocou 3 bipes. Você ouviu?",
+		}, []string{"Ouvi", "Tocar de novo", "Não ouvi"}, 0, nil)
+		if c == 1 {
+			continue
+		}
+		beepOK = c == 0
+		break
+	}
+	if !beepOK {
+		ui.Choose("Sem alto-falante", ToneWarn, []string{
+			"Este computador não tem alto-falante interno (é comum em PCs novos).",
+			"",
+			"Os alertas vão aparecer na tela do servidor, no painel (http://nome-do-servidor.local) e nos apps do Backeddy.",
+		}, []string{"Entendi"}, 0, nil)
+		return false, 22, 8
+	}
+	c, _ := ui.Cards("Silêncio à noite", []string{"Para um alerta de madrugada não acordar a casa. Dá para mudar depois no painel."}, []Card{
+		{Title: "Sem bipe das 22h às 8h", Desc: "Durante a noite o aviso espera; o bipe volta de manhã.", Plain: true, Recommended: true},
+		{Title: "Sem bipe das 23h às 7h", Desc: "Uma noite um pouco mais curta.", Plain: true},
+		{Title: "Bipar a qualquer hora", Desc: "Para quem prefere saber na hora, mesmo de madrugada.", Plain: true},
 	}, 0, []string{"Continuar"})
-	return []int{60, 85, 10}[c]
+	switch c {
+	case 1:
+		return true, 23, 7
+	case 2:
+		return true, -1, -1
+	}
+	return true, 22, 8
 }
 
 func askPassword(ui Frontend, recover bool) string {

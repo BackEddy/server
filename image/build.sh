@@ -35,6 +35,11 @@ curl -fsSL https://kopia.io/signing-key | gpg --dearmor --yes -o "$KOPIA_KEY"
 export KOPIA_KEY
 KOPIA_SRC="deb [signed-by=$KOPIA_KEY] http://packages.kopia.io/apt/ stable main"
 
+log "Vigia do servidor (Go)"
+( cd "$REPO/agent" && CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
+    go build -buildvcs=false -trimpath -ldflags "-s -w" -o "$W/backeddy-agent" . )
+export W
+
 log "Instalador (Go)"
 ( cd "$REPO/installer" && CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
     go build -buildvcs=false -trimpath -ldflags "-s -w -X main.version=$VER" -o "$W/backeddy-installer" . )

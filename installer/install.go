@@ -22,13 +22,15 @@ const (
 )
 
 type Installer struct {
-	Layout    *Layout
-	Name      string
-	Password  string
-	Plan      *Plan
-	DryRun    bool
-	TMPercent int  // % do espaço para o Time Machine
-	Recover   bool // reinstala só o sistema e mantém o volume de backups
+	Layout               *Layout
+	Name                 string
+	Password             string
+	Plan                 *Plan
+	DryRun               bool
+	TMPercent            int  // % do espaço para o Time Machine
+	Recover              bool // reinstala só o sistema e mantém o volume de backups
+	BeepOK               bool // o PC tem alto-falante (teste do alarme)
+	QuietStart, QuietEnd int  // silêncio à noite (-1 = bipar a qualquer hora)
 
 	log       *os.File
 	espPart   string
@@ -230,6 +232,16 @@ func (in *Installer) configure() error {
 		tm, strings.Join(disks, " "))
 	if in.Recover {
 		env += "RECOVER=1\n"
+	}
+	if in.QuietStart >= 0 && in.QuietEnd >= 0 && (in.QuietStart != 0 || in.QuietEnd != 0) {
+		env += fmt.Sprintf("QUIET_START=%d\nQUIET_END=%d\n", in.QuietStart, in.QuietEnd)
+	} else if in.QuietStart < 0 {
+		env += "QUIET_START=\nQUIET_END=\n"
+	}
+	if in.BeepOK {
+		env += "BEEP_OK=1\n"
+	} else {
+		env += "BEEP_OK=0\n"
 	}
 	if !in.Layout.Mirror && len(in.Layout.Data) >= 2 {
 		env += "NO_MIRROR=1\n"

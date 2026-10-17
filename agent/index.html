@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Backeddy Server</title>
+<style>
+:root { --bg:#f5f5f7; --card:#fff; --text:#1d1d1f; --text2:#6e6e73; --line:#e3e3e8; --accent:#007aff;
+        --bad:#d70015; --badbg:#ffe5e3; --ok:#1e7f34; --okbg:#e3f6e8; }
+@media (prefers-color-scheme: dark) {
+  :root { --bg:#1c1c1e; --card:#2c2c2e; --text:#f5f5f7; --text2:#a1a1a6; --line:#3a3a3c;
+          --badbg:#4a1c1c; --bad:#ff6b61; --okbg:#1c3a24; --ok:#5fd37a; }
+}
+* { box-sizing: border-box; }
+body { margin:0; background:var(--bg); color:var(--text); font: 15px/1.45 -apple-system, "Segoe UI", Inter, Roboto, sans-serif; }
+main { max-width: 760px; margin: 0 auto; padding: 24px 16px 48px; }
+header { display:flex; align-items:center; gap:14px; margin-bottom: 20px; }
+header svg { flex: none; }
+h1 { font-size: 22px; margin: 0; }
+.sub { color: var(--text2); font-size: 13px; }
+.card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 18px; margin-bottom: 16px; }
+.card h2 { font-size: 15px; margin: 0 0 10px; }
+.alert { background: var(--badbg); color: var(--bad); border-radius: 10px; padding: 12px 14px; margin-bottom: 10px; font-weight: 600; }
+.okbox { background: var(--okbg); color: var(--ok); border-radius: 10px; padding: 12px 14px; font-weight: 600; }
+button, select, input { font: inherit; }
+button { border: 0; border-radius: 8px; padding: 9px 16px; background: var(--accent); color: #fff; font-weight: 600; cursor: pointer; }
+button.secondary { background: transparent; color: var(--text); border: 1px solid var(--line); }
+.row { display:flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+pre { white-space: pre-wrap; word-break: break-word; margin: 0; font: 13px/1.5 ui-monospace, Menlo, Consolas, monospace; }
+input[type=password] { width: 100%; padding: 10px 12px; border-radius: 8px; border: 1px solid var(--line); background: var(--bg); color: var(--text); margin: 8px 0 12px; }
+select { padding: 7px 10px; border-radius: 8px; border: 1px solid var(--line); background: var(--bg); color: var(--text); }
+.err { color: var(--bad); min-height: 1.4em; }
+.hidden { display: none; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <svg width="48" height="48" viewBox="0 0 48 48" aria-hidden="true">
+      <defs><linearGradient id="g" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffb042"/><stop offset="1" stop-color="#e8455a"/></linearGradient></defs>
+      <rect width="48" height="48" rx="11" fill="url(#g)"/>
+      <rect x="10.5" y="24" width="27" height="8" rx="2.6" fill="#fff"/><circle cx="33.5" cy="28" r="1.4" fill="#2bd46b"/>
+      <rect x="10.5" y="34" width="27" height="8" rx="2.6" fill="#fff" opacity=".92"/><circle cx="33.5" cy="38" r="1.4" fill="#2bd46b"/>
+      <path d="M24 7v10" stroke="#fff" stroke-width="3.6" stroke-linecap="round"/><path d="M18.2 15.4h11.6L24 21.6z" fill="#fff"/>
+    </svg>
+    <div><h1 id="name">Backeddy Server</h1><div class="sub" id="sub">Situação do servidor de backup</div></div>
+  </header>
+
+  <section id="login" class="card hidden">
+    <h2>Entrar</h2>
+    <div class="sub">Use a senha do servidor (a mesma dos Macs e PCs).</div>
+    <form id="loginForm"><input type="password" id="pw" autocomplete="current-password" placeholder="Senha" autofocus>
+      <button type="submit">Entrar</button> <span class="err" id="loginErr"></span></form>
+  </section>
+
+  <section id="app" class="hidden">
+    <div class="card">
+      <h2>Alertas</h2>
+      <div id="alerts"></div>
+      <div id="ackRow" class="row hidden" style="margin-top:6px">
+        <span class="sub">Parar o bipe e lembrar de novo se continuar:</span>
+        <button data-days="1">Amanhã</button>
+        <button class="secondary" data-days="3">Em 3 dias</button>
+        <button class="secondary" data-days="7">Em 7 dias</button>
+      </div>
+    </div>
+    <div class="card">
+      <h2>Silêncio à noite</h2>
+      <div class="row">
+        <label><input type="checkbox" id="qon"> Sem bipe das</label>
+        <select id="qs"></select> às <select id="qe"></select>
+        <button class="secondary" id="qsave">Salvar</button> <span class="sub" id="qmsg"></span>
+      </div>
+    </div>
+    <div class="card"><h2>Situação</h2><pre id="status">Carregando…</pre></div>
+  </section>
+</main>
+<script>
+const $ = (id) => document.getElementById(id);
+for (const id of ["qs", "qe"]) for (let h = 0; h < 24; h++) $(id).add(new Option(h + "h", h));
+
+async function load() {
+  const r = await fetch("/api/status");
+  if (r.status === 401) { $("login").classList.remove("hidden"); $("app").classList.add("hidden"); return; }
+  const s = await r.json();
+  $("login").classList.add("hidden"); $("app").classList.remove("hidden");
+  if (s.name) { $("name").textContent = s.name; document.title = s.name + " · Backeddy"; }
+  const box = $("alerts"); box.innerHTML = "";
+  if (s.alerts && s.alerts.length) {
+    for (const a of s.alerts) { const d = document.createElement("div"); d.className = "alert"; d.textContent = a.Text; box.append(d); }
+    $("ackRow").classList.remove("hidden");
+    $("sub").textContent = "O servidor está bipando";
+  } else {
+    const d = document.createElement("div"); d.className = "okbox"; d.textContent = "Tudo certo: nenhum alerta pendente."; box.append(d);
+    $("ackRow").classList.add("hidden");
+    $("sub").textContent = "Situação do servidor de backup";
+  }
+  const on = s.quietStart >= 0 && s.quietEnd >= 0;
+  $("qon").checked = on;
+  $("qs").value = on ? s.quietStart : 22; $("qe").value = on ? s.quietEnd : 8;
+  $("status").textContent = s.status || "";
+}
+
+$("loginForm").onsubmit = async (e) => {
+  e.preventDefault();
+  const r = await fetch("/api/login", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ password: $("pw").value }) });
+  if (r.ok) { $("pw").value = ""; $("loginErr").textContent = ""; load(); }
+  else $("loginErr").textContent = r.status === 429 ? "Muitas tentativas. Espere 10 minutos." : "Senha errada.";
+};
+
+document.querySelectorAll("[data-days]").forEach((b) => b.onclick = async () => {
+  await fetch("/api/ack", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ days: +b.dataset.days }) });
+  load();
+});
+
+$("qsave").onclick = async () => {
+  const body = $("qon").checked ? { start: +$("qs").value, end: +$("qe").value } : { off: true };
+  const r = await fetch("/api/quiet", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  $("qmsg").textContent = r.ok ? "Salvo." : "Não deu para salvar.";
+  setTimeout(() => $("qmsg").textContent = "", 3000);
+};
+
+load();
+setInterval(load, 30000);
+</script>
+</body>
+</html>

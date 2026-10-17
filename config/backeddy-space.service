@@ -1,0 +1,7 @@
+[Unit]
+Description=Backeddy: divide o espaço entre Macs (Time Machine) e PCs (Kopia)
+ConditionPathExists=/etc/backeddy/server.conf
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/backeddy space

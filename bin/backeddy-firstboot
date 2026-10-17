@@ -27,6 +27,11 @@ else
   ARGS=(--yes --name "$NAME" --tm-percent "${TM_PERCENT:-60}")
 fi
 [ "${NO_MIRROR:-0}" = 1 ] && ARGS+=(--no-mirror)
+# alarme escolhido no instalador (silêncio à noite; o install.sh mantém este arquivo)
+if [ -n "${QUIET_START+x}" ]; then
+  mkdir -p /etc/backeddy
+  printf 'QUIET_START=%s\nQUIET_END=%s\nBEEP_OK=%s\n' "$QUIET_START" "${QUIET_END:-}" "${BEEP_OK:-1}" > /etc/backeddy/alerts.conf
+fi
 screen "Procurando os discos de backup…"
 for d in $DISKS; do
   # espera o disco aparecer (discos USB podem demorar)

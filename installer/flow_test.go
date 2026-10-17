@@ -105,8 +105,9 @@ func runFlow(t *testing.T, lsblk string, script []answer) *fakeUI {
 
 var tail = []answer{
 	{title: "Atenção"}, {title: "Confirme", input: "APAGAR"},
-	{title: "Nome"}, {title: "Quem vai fazer backup", card: 1},
+	{title: "Nome"},
 	{title: "Senha", input: "segredo1"}, {title: "Senha", input: "segredo1"},
+	{title: "Teste do alarme", choose: 1}, {title: "Teste do alarme", choose: 0}, {title: "Silêncio", card: 2},
 	{title: "Pronto"},
 }
 
@@ -141,6 +142,7 @@ func TestFlowRecover(t *testing.T) {
 		{title: "Recuperar o servidor", choose: 0},
 		{title: "Atenção"}, {title: "Confirme", input: "APAGAR"}, // só o SSD novo
 		{title: "Senha", input: "segredo1"}, {title: "Senha", input: "segredo1"},
+		{title: "Teste do alarme", choose: 2}, {title: "Sem alto-falante"},
 		{title: "Pronto"},
 	})
 }

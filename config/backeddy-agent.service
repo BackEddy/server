@@ -1,0 +1,12 @@
+[Unit]
+Description=Backeddy: vigia (alertas com bipe até alguém reconhecer)
+After=multi-user.target
+ConditionPathExists=/etc/backeddy/server.conf
+
+[Service]
+ExecStart=/usr/local/sbin/backeddy-agent
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

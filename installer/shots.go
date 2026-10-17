@@ -71,14 +71,6 @@ func runShots(dir string) error {
 				{Title: "Apagar tudo e começar do zero", Desc: "Os backups antigos serão apagados para sempre.", Risk: RiskRed},
 			}, 0, []string{"Continuar", "Desligar"}, 0)
 		}},
-		{"02e-quem-usa", func(g *GUI) {
-			g.stage = StageName
-			g.drawCards("Quem vai fazer backup aqui?", []string{"Assim o espaço é dividido do jeito certo. Dá para mudar depois."}, []Card{
-				{Title: "Macs e PCs", Desc: "60% do espaço para o Time Machine dos Macs, 40% para os PCs.", Plain: true},
-				{Title: "Só Macs", Desc: "85% do espaço para o Time Machine.", Plain: true},
-				{Title: "Só PCs com Windows", Desc: "90% do espaço para os PCs.", Plain: true},
-			}, 0, []string{"Continuar"}, 0)
-		}},
 		{"02-discos", func(g *GUI) {
 			g.stage = StageDisks
 			g.drawChoose("Encontrei estes discos", ToneNormal, []string{

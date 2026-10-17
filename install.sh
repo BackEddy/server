@@ -13,7 +13,7 @@
 #                      Repita para usar vários discos: com 2 ou mais, eles são ESPELHADOS.
 #                      Sem --disk, os backups ficam em /srv/backeddy no disco do sistema.
 #   --no-mirror        Soma os discos em vez de espelhar (mais espaço, SEM proteção)
-#   --tm-percent N     % do espaço reservado ao Time Machine (padrão: 60)
+#   --tm-percent N     (obsoleto, ignorado: o espaço é dividido sozinho entre Macs e PCs)
 #   --recover          Reaproveita discos de backup do Backeddy já existentes (reinstalação):
 #                      não apaga nada e restaura nome, senhas do Kopia e certificado guardados neles
 #   --yes              Não pergunta nada (exige BACKEDDY_PASSWORD no ambiente)
@@ -193,6 +193,7 @@ if [ "$RECOVER" = 1 ]; then
     for f in repo-password control-password tls.cert tls.key; do
       [ -f "$CFG/kopia/$f" ] && install -m 0600 "$CFG/kopia/$f" "$ETC/kopia/$f"
     done
+    if [ ! -f "$ETC/alerts.conf" ] && [ -f "$CFG/alerts.conf" ]; then install -m 0644 "$CFG/alerts.conf" "$ETC/alerts.conf"; fi
     ok "Configuração recuperada: \"$NAME\", senhas dos PCs e certificado"
   else
     echo "  Aviso: estes discos não têm a configuração guardada (instalados antes da versão 0.5)."
@@ -262,7 +263,8 @@ usable_bytes() {
   fi
 }
 USABLE_B=$(usable_bytes); [ -n "$USABLE_B" ] && [ "$USABLE_B" -gt 0 ] || USABLE_B=$(df -Pk "$DATA" | awk 'NR==2 {print $2 * 1024}')
-TM_MAX_GB=$(( USABLE_B * TM_PERCENT / 100 / 1024 / 1024 / 1024 ))
+# limite inicial: tudo menos a folga (10%); o backeddy-space ajusta a cada hora conforme os PCs crescem
+TM_MAX_GB=$(( USABLE_B * 90 / 100 / 1024 / 1024 / 1024 ))
 [ "$TM_MAX_GB" -lt 1 ] && TM_MAX_GB=1
 [ -f /etc/samba/smb.conf ] && [ ! -f /etc/samba/smb.conf.original ] && cp /etc/samba/smb.conf /etc/samba/smb.conf.original
 sed -e "s|@NAME@|$(sedesc "$NAME")|g" -e "s|@DATA@|$DATA|g" -e "s|@TM_MAX@|${TM_MAX_GB}G|g" \
@@ -271,7 +273,7 @@ testparm -s /etc/samba/smb.conf >/dev/null 2>&1 || die "Configuração do Samba 
 systemctl enable --now smbd >/dev/null 2>&1
 systemctl restart smbd
 systemctl disable --now nmbd >/dev/null 2>&1 || true
-ok "Compartilhamento Time Machine (limite ${TM_MAX_GB} GB = ${TM_PERCENT}% do espaço útil)"
+ok "Compartilhamento Time Machine (espaço dividido sozinho com os PCs)"
 
 # ---------- Avahi (aparecer sozinho no Mac) ----------
 XNAME=$(printf '%s' "$NAME" | sed -e 's/&/\&amp;/g' -e 's/</\&lt;/g' -e 's/>/\&gt;/g')
@@ -334,6 +336,7 @@ install -m 0755 "$SRC/bin/backeddy" /usr/local/bin/backeddy
 if [ -f "$ETC/disks.conf" ] && mountpoint -q "$DATA"; then
   install -d -m 0700 "$CFG" "$CFG/kopia"
   install -m 0600 "$ETC/server.conf" "$CFG/server.conf"
+  [ -f "$ETC/alerts.conf" ] && install -m 0600 "$ETC/alerts.conf" "$CFG/alerts.conf"
   for f in repo-password control-password tls.cert tls.key fingerprint; do
     [ -f "$ETC/kopia/$f" ] && install -m 0600 "$ETC/kopia/$f" "$CFG/kopia/$f"
   done
@@ -348,6 +351,24 @@ install -m 0644 "$SRC/config/getty-backeddy.conf" /etc/systemd/system/getty@tty1
 systemctl daemon-reload
 systemctl enable backeddy-issue.service backeddy-issue.timer >/dev/null 2>&1
 systemctl start backeddy-issue.timer >/dev/null 2>&1 || true
+# vigia: alertas com bipe até alguém reconhecer (o binário vem pronto na imagem do pendrive/VM)
+if [ -x "$SRC/bin/backeddy-agent" ]; then
+  install -m 0755 "$SRC/bin/backeddy-agent" /usr/local/sbin/backeddy-agent
+  install -m 0644 "$SRC/config/backeddy-agent.service" /etc/systemd/system/backeddy-agent.service
+  [ -f "$ETC/alerts.conf" ] || printf 'QUIET_START=22\nQUIET_END=8\n' > "$ETC/alerts.conf"
+  systemctl daemon-reload
+  systemctl enable backeddy-agent >/dev/null 2>&1 || true
+  systemctl restart backeddy-agent >/dev/null 2>&1 || true
+  ok "Alertas: o servidor bipa se algo der errado (sem bipe das 22h às 8h)"
+else
+  echo "  Aviso: vigia de alertas não incluído (compile agent/ com Go para ter os bipes)."
+fi
+# divisão automática do espaço entre Macs (Time Machine) e PCs (Kopia), a cada hora
+install -m 0644 "$SRC/config/backeddy-space.service" /etc/systemd/system/backeddy-space.service
+install -m 0644 "$SRC/config/backeddy-space.timer" /etc/systemd/system/backeddy-space.timer
+systemctl daemon-reload
+systemctl enable --now backeddy-space.timer >/dev/null 2>&1 || true
+/usr/local/bin/backeddy space >/dev/null 2>&1 || true
 /usr/local/bin/backeddy issue >/dev/null 2>&1 || true
 ok "Tela do servidor mostra a situação e como conectar"
 
