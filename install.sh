@@ -14,29 +14,35 @@
 #                      Sem --disk, os backups ficam em /srv/backeddy no disco do sistema.
 #   --no-mirror        Soma os discos em vez de espelhar (mais espaço, SEM proteção)
 #   --tm-percent N     % do espaço reservado ao Time Machine (padrão: 60)
+#   --recover          Reaproveita discos de backup do Backeddy já existentes (reinstalação):
+#                      não apaga nada e restaura nome, senhas do Kopia e certificado guardados neles
 #   --yes              Não pergunta nada (exige BACKEDDY_PASSWORD no ambiente)
 #
 # Pode ser rodado de novo com segurança: reaplica as configurações.
 set -euo pipefail
 
-VERSION="0.4.0"
+VERSION="0.5.0"
 NAME="Backup da Casa"
 DISKS=()
 MIRROR=1
 TM_PERCENT=60
 ASSUME_YES=0
+RECOVER=0
+NAME_SET=0
+TM_SET=0
 DATA=/srv/backeddy
 ETC=/etc/backeddy
 SRC="$(cd "$(dirname "$0")" && pwd)"
 
 while [ $# -gt 0 ]; do
   case "$1" in
-    --name) NAME="$2"; shift 2 ;;
+    --name) NAME="$2"; NAME_SET=1; shift 2 ;;
     --disk) DISKS+=("$2"); shift 2 ;;
     --no-mirror) MIRROR=0; shift ;;
-    --tm-percent) TM_PERCENT="$2"; shift 2 ;;
+    --tm-percent) TM_PERCENT="$2"; TM_SET=1; shift 2 ;;
+    --recover) RECOVER=1; shift ;;
     --yes) ASSUME_YES=1; shift ;;
-    -h|--help) sed -n '2,20p' "$0"; exit 0 ;;
+    -h|--help) sed -n '2,22p' "$0"; exit 0 ;;
     *) echo "Opção desconhecida: $1"; exit 1 ;;
   esac
 done
@@ -74,7 +80,26 @@ fi
 # Os discos não vão para o fstab: quem monta é o backeddy-mount, que usa o modo
 # degradado se um disco do espelho morrer (os backups continuam e o status avisa).
 human() { numfmt --to=iec --suffix=B "$1" 2>/dev/null || echo "$1 bytes"; }
-if [ "${#DISKS[@]}" -gt 0 ]; then
+CFG="$DATA/.backeddy"   # cópia da configuração junto com os backups (para recuperar o servidor)
+FSUUID=""
+if [ "$RECOVER" = 1 ]; then
+  # reinstalação: os discos de backup já existem; nada é apagado
+  [ "${#DISKS[@]}" -eq 0 ] || die "Use --recover sem --disk (os discos de backup são encontrados sozinhos)."
+  RDEV=""
+  for _ in $(seq 1 30); do   # discos USB podem demorar a aparecer
+    btrfs device scan >/dev/null 2>&1 || true
+    RDEV=$(blkid -L backeddy 2>/dev/null || true)
+    [ -n "$RDEV" ] && break
+    sleep 1
+  done
+  [ -n "$RDEV" ] || die "Não encontrei discos de backup do Backeddy para recuperar."
+  FSUUID=$(blkid -s UUID -o value "$RDEV")
+  say "Recuperando os discos de backup"
+  mkdir -p "$DATA"
+  mountpoint -q "$DATA" || chattr +i "$DATA" 2>/dev/null || true
+  ok "Discos de backup encontrados ($RDEV): mantidos, nada foi apagado"
+fi
+if [ "${#DISKS[@]}" -gt 0 ] || [ "$RECOVER" = 1 ]; then
   ROOTDEV=$(lsblk -no PKNAME "$(findmnt -no SOURCE /)" 2>/dev/null | head -1 || true)
   declare -A SEEN=()
   for d in "${DISKS[@]}"; do
@@ -85,7 +110,9 @@ if [ "${#DISKS[@]}" -gt 0 ]; then
   done
   command -v mkfs.btrfs >/dev/null || { apt-get update -qq; apt-get install -y -qq btrfs-progs >/dev/null; }
 
-  if mountpoint -q "$DATA" && [ "$(findmnt -no FSTYPE "$DATA")" = btrfs ] \
+  if [ "$RECOVER" = 1 ]; then
+    :
+  elif mountpoint -q "$DATA" && [ "$(findmnt -no FSTYPE "$DATA")" = btrfs ] \
      && [ "$(blkid -s LABEL -o value "$(findmnt -no SOURCE "$DATA" | sed 's/\[.*//')" 2>/dev/null)" = backeddy ]; then
     ok "Discos de backup já configurados em $DATA (mantidos)"
     echo "    Para trocar ou acrescentar um disco: backeddy replace-disk / backeddy add-disk"
@@ -137,7 +164,9 @@ if [ "${#DISKS[@]}" -gt 0 ]; then
 
   # identidade do conjunto de discos e montagem pelo backeddy-mount (sem fstab)
   install -d -m 0755 "$ETC"
-  if mountpoint -q "$DATA"; then FSUUID=$(findmnt -no UUID "$DATA"); else FSUUID=$(blkid -s UUID -o value "${DISKS[0]}"); fi
+  if [ -z "$FSUUID" ]; then
+    if mountpoint -q "$DATA"; then FSUUID=$(findmnt -no UUID "$DATA"); else FSUUID=$(blkid -s UUID -o value "${DISKS[0]}"); fi
+  fi
   echo "UUID=$FSUUID" > "$ETC/disks.conf"
   sed -i "\|[[:space:]]${DATA}[[:space:]]|d" /etc/fstab
   install -m 0755 "$SRC/bin/backeddy-mount" /usr/local/sbin/backeddy-mount
@@ -151,6 +180,29 @@ if [ "${#DISKS[@]}" -gt 0 ]; then
   systemctl restart backeddy-mount
   mountpoint -q "$DATA" || die "Não consegui montar os discos de backup (veja: journalctl -t backeddy)."
   ok "Discos montados em $DATA"
+fi
+
+# ---------- Recuperação: configuração guardada nos discos ----------
+if [ "$RECOVER" = 1 ]; then
+  if [ -f "$CFG/server.conf" ]; then
+    SAVED_NAME=$(. "$CFG/server.conf"; echo "${NAME:-}")
+    SAVED_TM=$(. "$CFG/server.conf"; echo "${TM_PERCENT:-}")
+    [ "$NAME_SET" = 1 ] || [ -z "$SAVED_NAME" ] || NAME="$SAVED_NAME"
+    [ "$TM_SET" = 1 ] || [ -z "$SAVED_TM" ] || TM_PERCENT="$SAVED_TM"
+    install -d -m 0700 "$ETC/kopia"
+    for f in repo-password control-password tls.cert tls.key; do
+      [ -f "$CFG/kopia/$f" ] && install -m 0600 "$CFG/kopia/$f" "$ETC/kopia/$f"
+    done
+    ok "Configuração recuperada: \"$NAME\", senhas dos PCs e certificado"
+  else
+    echo "  Aviso: estes discos não têm a configuração guardada (instalados antes da versão 0.5)."
+    if [ -d "$DATA/kopia" ] && [ -n "$(ls -A "$DATA/kopia" 2>/dev/null)" ]; then
+      OLDK="$DATA/kopia-antigo-$(date +%Y%m%d)"
+      mv "$DATA/kopia" "$OLDK"
+      echo "  Os backups dos PCs antigos foram guardados em $OLDK; os PCs recomeçam do zero."
+    fi
+    echo "  Os backups do Time Machine continuam."
+  fi
 fi
 
 # ---------- Pacotes ----------
@@ -181,12 +233,16 @@ SLUG=$(echo "$NAME" | iconv -f utf-8 -t ascii//TRANSLIT 2>/dev/null | tr '[:uppe
 hostnamectl set-hostname "$SLUG"
 grep -q "127.0.1.1" /etc/hosts && sed -i "s/^127.0.1.1.*/127.0.1.1\t$SLUG/" /etc/hosts || echo -e "127.0.1.1\t$SLUG" >> /etc/hosts
 install -d -m 0755 "$ETC"
-printf 'NAME="%s"\nSLUG="%s"\nVERSION="%s"\n' "$NAME" "$SLUG" "$VERSION" > "$ETC/server.conf"
+printf 'NAME="%s"\nSLUG="%s"\nVERSION="%s"\nTM_PERCENT="%s"\n' "$NAME" "$SLUG" "$VERSION" "$TM_PERCENT" > "$ETC/server.conf"
 ok "Endereço na rede: $SLUG.local"
 
 # ---------- Usuário e pastas ----------
 id backeddy >/dev/null 2>&1 || useradd --system --home-dir "$DATA" --shell /usr/sbin/nologin backeddy
 install -d -m 0755 "$DATA"
+# backups do Time Machine de uma instalação anterior: o usuário novo pode ter outro número
+if [ -d "$DATA/timemachine" ] && [ "$(stat -c %u "$DATA/timemachine")" != "$(id -u backeddy)" ]; then
+  chown -R backeddy:backeddy "$DATA/timemachine"
+fi
 install -d -m 0700 -o backeddy -g backeddy "$DATA/timemachine"
 install -d -m 0700 -o root -g root "$DATA/kopia"
 printf '%s\n%s\n' "$PASSWORD" "$PASSWORD" | smbpasswd -s -a backeddy >/dev/null
@@ -273,6 +329,16 @@ systemctl enable --now smartd >/dev/null 2>&1 || true
 ok "Nunca dorme (nem com a tampa fechada) e se atualiza sozinho"
 
 install -m 0755 "$SRC/bin/backeddy" /usr/local/bin/backeddy
+
+# Cópia da configuração junto com os backups: se o disco do sistema morrer, o pendrive recupera tudo
+if [ -f "$ETC/disks.conf" ] && mountpoint -q "$DATA"; then
+  install -d -m 0700 "$CFG" "$CFG/kopia"
+  install -m 0600 "$ETC/server.conf" "$CFG/server.conf"
+  for f in repo-password control-password tls.cert tls.key fingerprint; do
+    [ -f "$ETC/kopia/$f" ] && install -m 0600 "$ETC/kopia/$f" "$CFG/kopia/$f"
+  done
+  ok "Configuração guardada nos discos de backup (para recuperar o servidor)"
+fi
 
 # Tela do monitor do servidor: situação + como conectar, atualizada no boot e a cada 2 minutos
 install -m 0644 "$SRC/config/backeddy-issue.service" /etc/systemd/system/backeddy-issue.service

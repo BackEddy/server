@@ -27,8 +27,14 @@ cat > "$R/root/.bash_profile" <<'EOF'
 if [ "$(tty)" = /dev/tty1 ]; then
   export LANG=C.UTF-8
   udevadm settle -t 15 2>/dev/null   # espera o driver de vídeo e os discos
-  cp /usr/local/bin/backeddy-installer /run/backeddy-installer
-  /run/backeddy-installer
+  # /run não permite executar programas: monta uma área própria na memória para o instalador
+  BIN=/usr/local/bin/backeddy-installer
+  mkdir -p /run/backeddy-bin
+  if { mountpoint -q /run/backeddy-bin || mount -t tmpfs -o size=64m,mode=0755 tmpfs /run/backeddy-bin 2>/dev/null; } &&
+     cp "$BIN" /run/backeddy-bin/; then
+    BIN=/run/backeddy-bin/backeddy-installer
+  fi
+  "$BIN"
   echo
   echo "Instalador encerrado. Para abrir de novo: backeddy-installer"
 fi

@@ -10,6 +10,10 @@ import (
 	"path/filepath"
 )
 
+func d0(name string, gb int64, rota bool) Disk {
+	return Disk{Name: name, Path: "/dev/" + name, Size: gb * GB, Rotational: rota, Model: "Modelo"}
+}
+
 func runShots(dir string) error {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return err
@@ -26,6 +30,54 @@ func runShots(dir string) error {
 				"Macs (Time Machine) e PCs com Windows vão poder fazer backup aqui, automaticamente.",
 				"", "A instalação leva uns 5 minutos.",
 			}, []string{"Começar", "Desligar"}, 0)
+		}},
+		{"02a-modos", func(g *GUI) {
+			g.stage = StageDisks
+			ds := []Disk{d0("sda", 240, false), d0("sdb", 2000, true), d0("sdc", 2000, true)}
+			opts, _, _ := Options(ds)
+			cards := make([]Card, len(opts))
+			for i, o := range opts {
+				cards[i] = Card{Title: o.Title, Value: HumanSize(o.Usable), Desc: o.Desc, Risk: o.Risk, Recommended: i == 0}
+			}
+			g.hover = hitCard + 1
+			g.drawCards("Como usar os discos", Explain(opts[0]), cards, 0, []string{"Continuar", "Escolher os discos à mão", "Desligar"}, 0)
+			g.hover = 0
+		}},
+		{"02b-manual", func(g *GUI) {
+			g.stage = StageDisks
+			ds := []Disk{d0("sda", 240, false), d0("sdb", 2000, true), d0("sdc", 2000, true), d0("sdd", 1000, true)}
+			ds[3].Health, ds[3].Content = HealthBad, "Windows"
+			roles := []Role{RoleSystem, RoleBackup, RoleBackup, RoleNone}
+			l, _ := ManualLayout(ds, roles, true)
+			g.drawManual("Escolher os discos à mão", []string{"Para cada disco: Sistema, Backup, Sistema + backup ou Não usar (fica intocado)."},
+				ds, roles, true, 1, l.Summary)
+		}},
+		{"02c-sem-protecao", func(g *GUI) {
+			g.stage = StageDisks
+			ds := []Disk{d0("sda", 240, false), d0("sdb", 2000, true), d0("sdc", 2000, true)}
+			opts, _, _ := Options(ds)
+			l := opts[1]
+			lines := append([]string{}, l.Summary...)
+			lines = append(lines, "", "Se um disco morrer, você perde o histórico de backups. Os arquivos nos Macs e PCs continuam, e o servidor recomeça do zero.",
+				"", "Dá para ligar o espelho depois, sem reinstalar, se houver espaço livre: sudo backeddy mirror")
+			g.drawChoose("Sem proteção contra disco quebrado", ToneWarn, lines, []string{"Entendi, continuar", "Voltar"}, 0)
+		}},
+		{"02d-recuperar", func(g *GUI) {
+			g.stage = StageIntro
+			g.drawCards("Encontrei backups do Backeddy", []string{
+				"Este computador já foi um Backeddy Server. Dá para reinstalar só o sistema e manter todos os backups: os Macs e PCs continuam de onde pararam.",
+			}, []Card{
+				{Title: "Recuperar o servidor", Desc: "Reinstala o sistema e mantém os backups e as configurações.", Risk: RiskGreen, Recommended: true},
+				{Title: "Apagar tudo e começar do zero", Desc: "Os backups antigos serão apagados para sempre.", Risk: RiskRed},
+			}, 0, []string{"Continuar", "Desligar"}, 0)
+		}},
+		{"02e-quem-usa", func(g *GUI) {
+			g.stage = StageName
+			g.drawCards("Quem vai fazer backup aqui?", []string{"Assim o espaço é dividido do jeito certo. Dá para mudar depois."}, []Card{
+				{Title: "Macs e PCs", Desc: "60% do espaço para o Time Machine dos Macs, 40% para os PCs.", Plain: true},
+				{Title: "Só Macs", Desc: "85% do espaço para o Time Machine.", Plain: true},
+				{Title: "Só PCs com Windows", Desc: "90% do espaço para os PCs.", Plain: true},
+			}, 0, []string{"Continuar"}, 0)
 		}},
 		{"02-discos", func(g *GUI) {
 			g.stage = StageDisks
@@ -87,6 +139,9 @@ func runShots(dir string) error {
 		g := newGUI(size[0], size[1])
 		for _, s := range list {
 			s.draw(g)
+			if s.name == "02a-modos" {
+				g.drawCursor(int(g.X(winW-200)), int(g.Y(250)))
+			}
 			path := filepath.Join(dir, fmt.Sprintf("%dx%d-%s.png", size[0], size[1], s.name))
 			f, err := os.Create(path)
 			if err != nil {

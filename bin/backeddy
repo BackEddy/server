@@ -5,6 +5,8 @@
 #   backeddy passwd            troca a senha usada pelos Macs
 #   backeddy replace-disk NOVO [ANTIGO]   troca um disco do espelho (morto ou com defeito)
 #   backeddy add-disk NOVO     acrescenta um disco e passa a espelhar os backups
+#   backeddy mirror            liga o espelho (cada arquivo em 2 discos), se houver espaço
+#   backeddy unmirror          desliga o espelho: mais espaço, SEM proteção
 #   backeddy issue             atualiza a tela do monitor do servidor (situação + como conectar)
 set -euo pipefail
 ETC=/etc/backeddy; DATA=/srv/backeddy; KCONF=$ETC/kopia
@@ -30,6 +32,19 @@ else
   I_OK='🟢'; I_WARN='🟡'; I_BAD='🔴'; I_WAIT='⏳'; I_OFF='⚪'; I_HEAD='🌀'; I_DISK='💾'; I_KEY='🔐'; I_DONE='✅'
   IND='  '
 fi
+# Recalcula o limite do Time Machine depois de mudar o espaço (espelho, disco novo).
+tm_limit() {
+  local used free usable pct gb
+  read -r used free < <(btrfs filesystem usage -b "$DATA" 2>/dev/null | awk '
+    /^Data,/ { if (match($0, /Used:[0-9]+/)) u += substr($0, RSTART + 5, RLENGTH - 5) }
+    /Free \(estimated\):/ { f = $3 }
+    END { print u + 0, f + 0 }')
+  usable=$((used + free)); pct=${TM_PERCENT:-60}
+  gb=$(( usable * pct / 100 / 1024 / 1024 / 1024 )); [ "$gb" -lt 1 ] && gb=1
+  sed -i "s|^\([[:space:]]*fruit:time machine max size = \).*|\1${gb}G|" /etc/samba/smb.conf
+  systemctl reload smbd >/dev/null 2>&1 || systemctl restart smbd >/dev/null 2>&1 || true
+  echo "   Limite do Time Machine: ${gb} GB (${pct}% do espaço útil)"
+}
 human() { numfmt --to=iec --suffix=B "$1" 2>/dev/null || echo "$1"; }
 
 case "${1:-status}" in
@@ -46,14 +61,18 @@ case "${1:-status}" in
         NDEV=$(echo "$SHOW" | grep -c '^[[:space:]]*devid' || true)
         MISSING=$(echo "$SHOW" | grep -ci 'missing' || true)
         ERRS=$(btrfs device stats "$DATA" 2>/dev/null | awk '$2 != 0 {n++} END {print n+0}')
-        case "$PROF" in RAID1*) LAYOUT="Espelho de $NDEV discos" ;; *) LAYOUT="$NDEV disco(s), sem espelho" ;; esac
+        MARK=$I_OK
+        case "$PROF" in
+          RAID1*) LAYOUT="Espelho de $NDEV discos" ;;
+          *) LAYOUT="$NDEV disco(s), sem espelho: se um disco morrer, perde o histórico"; MARK=$I_WARN ;;
+        esac
         if [ "$MISSING" -gt 0 ]; then
           echo "$I_BAD Espelho DEGRADADO: falta um disco. Os backups continuam, mas sem proteção."
           echo "$IND Coloque um disco novo e rode: sudo backeddy replace-disk /dev/NOVO"
         elif [ "$ERRS" -gt 0 ]; then
           echo "$I_WARN $LAYOUT · um disco registrou erros de leitura/gravação (veja: btrfs device stats $DATA)"
         else
-          echo "$I_OK $LAYOUT"
+          echo "$MARK $LAYOUT"
         fi
       else
         echo "$I_BAD Discos de backup NÃO montados: backups parados (veja: journalctl -t backeddy)"
@@ -148,7 +167,44 @@ MSG
     btrfs device add -f "$NEW" "$DATA"
     echo "Copiando os backups para o novo disco. Pode levar horas: não desligue o servidor."
     btrfs balance start -dconvert=raid1,soft -mconvert=raid1,soft "$DATA"
+    tm_limit
     echo "$I_DONE Pronto: backups espelhados. Confira com: sudo backeddy status"
+    ;;
+  mirror)
+    mountpoint -q "$DATA" || { echo "Os discos de backup não estão montados."; exit 1; }
+    PROF=$(btrfs filesystem df "$DATA" | awk -F'[ ,:]+' '/^Data/{print $2; exit}')
+    case "$PROF" in RAID1*) echo "$I_DONE O espelho já está ligado."; exit 0 ;; esac
+    NDEV=$(btrfs filesystem show "$DATA" | grep -c '^[[:space:]]*devid' || true)
+    [ "$NDEV" -ge 2 ] || { echo "O espelho precisa de 2 discos. Coloque outro e rode: sudo backeddy add-disk /dev/NOVO"; exit 1; }
+    # cabe? cada arquivo passa a ocupar o dobro, sem passar do que o menor conjunto aguenta
+    read -r USED TOTAL MAXD < <(btrfs filesystem usage -b "$DATA" | awk '
+      /^Data,/ { if (match($0, /Used:[0-9]+/)) u = substr($0, RSTART + 5, RLENGTH - 5) }
+      /Device size:/ && !t { t = $3 }
+      END { print u + 0, t + 0, 0 }')
+    MAXD=$(btrfs filesystem show --raw "$DATA" | awk '$1 == "devid" { s = $4; if (s > m) m = s } END { print m + 0 }')
+    CAP=$(( TOTAL / 2 )); REST=$(( TOTAL - MAXD )); [ "$REST" -lt "$CAP" ] && CAP=$REST
+    if [ $(( USED * 105 / 100 )) -gt "$CAP" ]; then
+      echo "Não cabe: os backups ocupam $(human "$USED") e o espelho comporta $(human "$CAP")."
+      echo "Coloque um disco maior (sudo backeddy add-disk /dev/NOVO) ou apague backups antigos."
+      exit 1
+    fi
+    echo "Ligando o espelho: os backups ($(human "$USED")) vão ser copiados para um segundo disco."
+    echo "Pode levar horas em discos grandes. O servidor continua funcionando; não desligue."
+    btrfs balance start -dconvert=raid1,soft -mconvert=raid1,soft "$DATA"
+    tm_limit
+    echo "$I_DONE Espelho ligado: se um disco morrer, nada se perde. Confira com: sudo backeddy status"
+    ;;
+  unmirror)
+    mountpoint -q "$DATA" || { echo "Os discos de backup não estão montados."; exit 1; }
+    PROF=$(btrfs filesystem df "$DATA" | awk -F'[ ,:]+' '/^Data/{print $2; exit}')
+    case "$PROF" in RAID1*) ;; *) echo "O espelho já está desligado."; exit 0 ;; esac
+    echo "⚠️  Sem espelho, os backups ganham espaço, mas se um disco morrer você perde o histórico de backups."
+    echo "   (Os arquivos nos Macs e PCs continuam; o servidor recomeçaria do zero.)"
+    read -rp "Para confirmar, digite SEM ESPELHO: " C
+    [ "$C" = "SEM ESPELHO" ] || { echo "Cancelado. Nada foi alterado."; exit 1; }
+    btrfs balance start -dconvert=single,soft "$DATA"
+    tm_limit
+    echo "$I_DONE Espelho desligado. Para ligar de novo: sudo backeddy mirror"
     ;;
   issue)
     # Tela do monitor do servidor (antes do login): situação completa + como conectar.
@@ -156,7 +212,7 @@ MSG
     ST=$(TERM=linux BACKEDDY_PLAIN=1 "$0" status 2>/dev/null | tail -n +3 || true)
     if printf '%s' "$ST" | grep -q 'ERRO'; then
       HEAD=$'\e[1;31m'"$NAME — com problema (veja abaixo)"$'\e[0m'
-    elif printf '%s' "$ST" | grep -q 'AVISO\|\.\.\.\.'; then
+    elif printf '%s' "$ST" | grep -v 'sem espelho' | grep -q 'AVISO\|\.\.\.\.'; then
       HEAD=$'\e[1;33m'"$NAME — atenção (veja abaixo)"$'\e[0m'
     else
       HEAD=$'\e[1;32m'"$NAME — servidor funcionando"$'\e[0m'
@@ -170,7 +226,8 @@ MSG
       echo
       echo "    Mac:      Ajustes do Sistema › Geral › Time Machine › \"$NAME\""
       echo "              usuário: backeddy · senha: a definida na instalação"
-      echo "    Windows:  https://$SLUG.local:51515   (ou https://\\4:51515)"
+      echo "    Windows:  app Backeddy for Windows (em breve). Endereço do servidor para o app:"
+      echo "              https://$SLUG.local:51515  (ou https://\\4:51515) - não abre no navegador"
       echo "    Acesso:   ssh admin@$SLUG.local   (ou admin@\\4)"
       echo "  $LINE"
       printf '%s\n' "$ST" | sed 's/^/    /'
@@ -184,5 +241,5 @@ MSG
     fi
     rm -f "$NEW"
     ;;
-  *) sed -n '2,8p' "$0"; exit 1 ;;
+  *) sed -n '2,10p' "$0"; exit 1 ;;
 esac

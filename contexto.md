@@ -145,6 +145,19 @@ via QR); x86 64 bits apenas (Debian 13 sem i386; Kopia sem binário 32 bits).
   Windows, SSH (IP via `\4` do agetty) e o `backeddy status` completo; getty@tty1 espera firstboot e issue.
   No console, `backeddy status` usa [  OK  ]/[AVISO ]/[ ERRO ] coloridos; por SSH continua com emojis.
 
+### 0.4.0 testada (17/10/2026) e 0.5.0 escrita
+- 0.4.0 aprovada no Hyper-V: instalador gráfico, reinício ao tirar o pendrive, tela do servidor com SSH.
+  Bug achado: /run é noexec no Debian 13 → instalador agora roda de um tmpfs próprio (/run/backeddy-bin)
+  e faz mlockall. A "interface web" do Windows não existe (Kopia com --no-ui): texto da tela corrigido.
+- 0.5.0 (spec "Discos e modos" no Claude Docs): mouse (evdev, relativo/absoluto/touchpad, cursor, hover);
+  cartões de modo Protegido / Mais espaço / Tudo junto / Um disco só, com espaço e risco (verde/amarelo/vermelho;
+  amarelo = tela de aviso, vermelho = digitar CONTINUAR); Manual (papel por disco + chave do espelho);
+  SMART no instalador (disco ruim fica de fora; no Manual vira vermelho); avisos "tem Windows/Linux/backups";
+  "Quem vai fazer backup aqui?" sem plano; Recuperar servidor (install.sh --recover; configuração guardada
+  em /srv/backeddy/.backeddy: server.conf, senhas e certificado do Kopia; reaproveita as partições do sistema
+  se o disco antigo existir); `backeddy mirror`/`unmirror` + recálculo do limite do Time Machine.
+  Testes: matriz de discos, Manual, recuperação, SMART, lsblk e roteiros completos do instalador (flow_test.go).
+
 ### Plano de construção
 | Fase | Conteúdo | Situação |
 | --- | --- | --- |

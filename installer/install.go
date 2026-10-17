@@ -22,11 +22,13 @@ const (
 )
 
 type Installer struct {
-	Layout   *Layout
-	Name     string
-	Password string
-	Plan     *Plan
-	DryRun   bool
+	Layout    *Layout
+	Name      string
+	Password  string
+	Plan      *Plan
+	DryRun    bool
+	TMPercent int  // % do espaço para o Time Machine
+	Recover   bool // reinstala só o sistema e mantém o volume de backups
 
 	log       *os.File
 	espPart   string
@@ -121,6 +123,10 @@ func (in *Installer) Run(progress func(step int)) error {
 
 func (in *Installer) partition() error {
 	sys := in.Layout.System
+	if in.Layout.ReuseSystem { // recuperação no mesmo disco: só refaz as partições do sistema
+		in.espPart, in.rootPart = sys.EFIPart, sys.RootPart
+		return nil
+	}
 	shared := false
 	for _, t := range in.Layout.Data {
 		if !t.Whole {
@@ -214,10 +220,20 @@ func (in *Installer) configure() error {
 	for _, u := range in.dataUUIDs {
 		disks = append(disks, "/dev/disk/by-partuuid/"+u)
 	}
+	tm := in.TMPercent
+	if tm <= 0 {
+		tm = in.Plan.TMPercent()
+	}
 	env := fmt.Sprintf("# Lido pelo primeiro boot e apagado em seguida\nNAME_B64=%s\nPASSWORD_B64=%s\nTM_PERCENT=%d\nDISKS=\"%s\"\n",
 		base64.StdEncoding.EncodeToString([]byte(in.Name)),
 		base64.StdEncoding.EncodeToString([]byte(in.Password)),
-		in.Plan.TMPercent(), strings.Join(disks, " "))
+		tm, strings.Join(disks, " "))
+	if in.Recover {
+		env += "RECOVER=1\n"
+	}
+	if !in.Layout.Mirror && len(in.Layout.Data) >= 2 {
+		env += "NO_MIRROR=1\n"
+	}
 	if err := in.writeFile(target+"/etc/backeddy/firstboot.env", env, 0600); err != nil {
 		return err
 	}

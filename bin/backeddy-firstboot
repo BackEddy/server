@@ -19,8 +19,14 @@ screen() { # $1 = linha de situação
   } > "$TTY" 2>/dev/null || true
 }
 
-NAME=$(printf '%s' "$NAME_B64" | base64 -d)
-ARGS=(--yes --name "$NAME" --tm-percent "${TM_PERCENT:-60}")
+NAME=$(printf '%s' "${NAME_B64:-}" | base64 -d)
+if [ "${RECOVER:-0}" = 1 ]; then
+  # reinstalação: nome e divisão do espaço vêm da configuração guardada nos discos de backup
+  ARGS=(--yes --recover)
+else
+  ARGS=(--yes --name "$NAME" --tm-percent "${TM_PERCENT:-60}")
+fi
+[ "${NO_MIRROR:-0}" = 1 ] && ARGS+=(--no-mirror)
 screen "Procurando os discos de backup…"
 for d in $DISKS; do
   # espera o disco aparecer (discos USB podem demorar)

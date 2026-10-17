@@ -2,9 +2,11 @@ package main
 
 // Backeddy Server — instalador do pendrive.
 // "Espeta, confirma, pronto": apaga o PC (depois de avisar), instala o sistema e
-// deixa o primeiro boot configurar os discos de backup.
+// deixa o primeiro boot configurar os discos de backup. Liberdade total sobre os discos,
+// com os riscos de cada escolha avisados.
 
 import (
+	"errors"
 	"flag"
 	"fmt"
 	"os"
@@ -16,6 +18,9 @@ import (
 )
 
 var version = "dev"
+
+// errOff: a pessoa escolheu desligar.
+var errOff = errors.New("desligar")
 
 func main() {
 	dry := flag.Bool("dry-run", false, "mostra o que seria feito, sem apagar nada")
@@ -32,6 +37,9 @@ func main() {
 		}
 		return
 	}
+
+	// Mantém o programa inteiro na memória: o pendrive pode ser retirado no fim sem derrubar o instalador.
+	_ = syscall.Mlockall(syscall.MCL_CURRENT)
 
 	var ui Frontend
 	if !*textMode {
@@ -52,7 +60,13 @@ func main() {
 		}
 	}()
 
-	plan, perr := LoadPlan(*planFile)
+	if err := run(ui, *dry, *fake, *planFile); err != nil {
+		powerOff(*dry, ui)
+	}
+}
+
+func run(ui Frontend, dry bool, fake, planFile string) error {
+	plan, perr := LoadPlan(planFile)
 
 	// 1. Boas-vindas
 	ui.Stage(StageIntro)
@@ -61,141 +75,105 @@ func main() {
 			"Macs (Time Machine) e PCs com Windows vão poder fazer backup aqui, automaticamente.",
 			"",
 			"A instalação leva uns 5 minutos. Versão " + version + ".",
-		}, []string{"Começar", "Desligar"}, 0, nil) == 1 {
-		powerOff(*dry, ui)
-		return
+		}, []string{"Começar", "Desligar"}, 0, nil) != 0 {
+		return errOff
 	}
 
 	// 2. Discos
+	ui.Stage(StageDisks)
+	ui.Notice("Procurando os discos…", ToneNormal, []string{"Conferindo também a saúde de cada disco."})
 	var disks []Disk
 	var err error
-	if *fake != "" {
+	if fake != "" {
 		var data []byte
-		if data, err = os.ReadFile(*fake); err == nil {
+		if data, err = os.ReadFile(fake); err == nil {
 			disks, err = parseLsblk(data)
 		}
 	} else {
 		disks, err = ScanDisks()
+		CheckHealth(disks)
 	}
-	var layout *Layout
-	if err == nil {
-		layout, err = ChooseLayout(disks)
+	if err == nil && len(usable(disks)) == 0 {
+		err = errors.New("nenhum disco encontrado")
 	}
 	if err != nil {
-		ui.Choose("Não dá para instalar neste computador", ToneDanger,
-			[]string{err.Error(), "", "O Backeddy Server precisa de um disco de pelo menos 40 GB."},
-			[]string{"Desligar"}, 0, nil)
-		powerOff(*dry, ui)
-		return
+		ui.Choose("Não encontrei discos para instalar", ToneDanger, []string{
+			err.Error() + ".",
+			"",
+			"Se o computador tem discos, confira na BIOS/UEFI se o modo RAID ou \"Intel RST\" está ligado: troque para AHCI e comece de novo.",
+		}, []string{"Desligar"}, 0, nil)
+		return errOff
 	}
 
-	lines := append([]string{}, layout.Summary...)
-	if perr != nil {
-		lines = append(lines, "", "!Não consegui ler o plano do pendrive ("+perr.Error()+"). Seguindo sem ele.")
-	}
-	for _, w := range layout.Warns {
-		lines = append(lines, "", "!"+w)
-	}
-	fit := plan.Check(layout.Usable)
-	if fit == FitGreen {
-		lines = append(lines, "", "+Cabe com folga: o recomendado no plano é "+HumanSize(plan.RecommendedBytes)+".")
-	}
-	ui.Stage(StageDisks)
-	if ui.Choose("Encontrei estes discos", ToneNormal, lines, []string{"Continuar", "Desligar"}, 0, nil) == 1 {
-		powerOff(*dry, ui)
-		return
-	}
+	in := &Installer{Plan: plan, DryRun: dry, TMPercent: plan.TMPercent()}
 
-	// 3. Comparação com o plano
-	switch fit {
-	case FitYellow:
-		if ui.Choose("Cabe, mas com pouco histórico", ToneWarn, []string{
-			fmt.Sprintf("Espaço para backups: %s. Recomendado no plano: %s.", HumanSize(layout.Usable), HumanSize(plan.RecommendedBytes)),
-			"",
-			"Os backups vão funcionar, mas o servidor vai guardar menos tempo de histórico.",
-			"Para guardar mais, use um disco de " + HumanSize(plan.RecommendedBytes) + " ou maior.",
-		}, []string{"Continuar", "Desligar"}, 0, nil) == 1 {
-			powerOff(*dry, ui)
-			return
-		}
-	case FitRed:
-		if ui.Choose("O espaço não é suficiente", ToneDanger, []string{
-			fmt.Sprintf("Quando você criou este pendrive, o recomendado era pelo menos %s.", HumanSize(plan.MinBytes)),
-			fmt.Sprintf("Este computador só tem %s para backups.", HumanSize(layout.Usable)),
-			"",
-			"Sugestão: instale um disco de " + HumanSize(plan.RecommendedBytes) + " ou maior e comece de novo.",
-		}, []string{"Desligar", "Continuar mesmo assim"}, 0, nil) != 1 {
-			powerOff(*dry, ui)
-			return
-		}
-		for {
-			v := ui.Input("Tem certeza?", []string{
-				fmt.Sprintf("Com %s, %s não vão caber juntos.", HumanSize(layout.Usable), plan.ComputerNames()),
-				"Quando o disco encher, algum computador vai parar de fazer backup.",
-				"",
-				"Para seguir mesmo assim, digite CONTINUAR. Para desistir, digite SAIR.",
-			}, "Digite:", "", false)
-			if v == "CONTINUAR" {
-				break
+	// 3. Backups de uma instalação anterior: recuperar ou começar do zero
+	var layout *Layout
+	recover := false
+	for layout == nil {
+		recover = false
+		if HasBackeddy(disks) {
+			c, b := ui.Cards("Encontrei backups do Backeddy", []string{
+				"Este computador já foi um Backeddy Server. Dá para reinstalar só o sistema e manter todos os backups: os Macs e PCs continuam de onde pararam.",
+			}, []Card{
+				{Title: "Recuperar o servidor", Desc: "Reinstala o sistema e mantém os backups e as configurações.", Risk: RiskGreen, Recommended: true},
+				{Title: "Apagar tudo e começar do zero", Desc: "Os backups antigos serão apagados para sempre.", Risk: RiskRed},
+			}, 0, []string{"Continuar", "Desligar"})
+			if b != 0 {
+				return errOff
 			}
-			if strings.EqualFold(v, "SAIR") {
-				powerOff(*dry, ui)
-				return
+			recover = c == 0
+		}
+		if recover {
+			l, err := RecoverLayout(disks)
+			if err != nil {
+				ui.Choose("Não dá para recuperar ainda", ToneWarn, []string{err.Error() + "."}, []string{"Desligar"}, 0, nil)
+				return errOff
+			}
+			lines := append([]string{}, l.Summary...)
+			lines = append(lines, "", "Nome, senhas dos PCs e certificado voltam como eram (ficam guardados junto com os backups).")
+			if ui.Choose("Recuperar o servidor", ToneNormal, lines, []string{"Recuperar", "Voltar"}, 0, nil) != 0 {
+				continue
+			}
+			if len(l.Reds) > 0 && !redBarrier(ui, l.Reds) {
+				continue
+			}
+			layout = l
+			in.Recover = true
+		} else {
+			if layout, err = chooseLayout(ui, disks); err != nil {
+				return err
+			}
+			if !checkPlan(ui, plan, perr, layout) {
+				return errOff
 			}
 		}
 	}
 
 	// 4. Avisos de apagar
-	var dl []string
-	for _, d := range layout.AllDisks() {
-		dl = append(dl, "• "+d.Label())
-	}
-	warn := append([]string{"Estes discos vão ser apagados por completo:", ""}, dl...)
-	warn = append(warn, "", "Windows, fotos, documentos: tudo o que estiver nesses discos será apagado para sempre.")
 	ui.Stage(StageConfirm)
-	if ui.Choose("Atenção: este computador vai ser apagado", ToneDanger, warn, []string{"Entendi, continuar", "Desligar"}, 1, nil) == 1 {
-		powerOff(*dry, ui)
-		return
-	}
-	for {
-		v := ui.Input("Confirme que pode apagar", append([]string{"Último aviso. Discos que serão apagados:", ""}, dl...),
-			"Para confirmar, digite APAGAR:", "", false)
-		if v == "APAGAR" {
-			break
-		}
-		if strings.EqualFold(v, "SAIR") {
-			powerOff(*dry, ui)
-			return
+	if !recover || !layout.ReuseSystem {
+		if !confirmErase(ui, layout) {
+			return errOff
 		}
 	}
 
-	// 5. Nome e senha
-	name := "Backup da Casa"
-	if plan != nil && strings.TrimSpace(plan.Name) != "" {
-		name = strings.TrimSpace(plan.Name)
-	}
+	// 5. Nome, uso e senha
 	ui.Stage(StageName)
-	name = ui.Input("Nome do servidor", []string{"É o nome que vai aparecer no Mac e no Windows."}, "Nome:", name, false)
-	var pass string
-	for {
-		p1 := ui.Input("Senha do servidor", []string{
-			"Macs e PCs vão usar esta senha para fazer backup.",
-			"Ela também serve para administrar o servidor (usuário: admin).",
-			"Mínimo de 6 caracteres.",
-		}, "Senha:", "", true)
-		if len([]rune(p1)) < 6 {
-			continue
+	if !recover {
+		name := "Backup da Casa"
+		if plan != nil && strings.TrimSpace(plan.Name) != "" {
+			name = strings.TrimSpace(plan.Name)
 		}
-		p2 := ui.Input("Senha do servidor", []string{"Digite a senha de novo, para conferir."}, "Senha:", "", true)
-		if p1 == p2 {
-			pass = p1
-			break
+		in.Name = ui.Input("Nome do servidor", []string{"É o nome que vai aparecer no Mac e no Windows."}, "Nome:", name, false)
+		if plan == nil {
+			in.TMPercent = askWhoUses(ui)
 		}
-		ui.Choose("As senhas não conferem", ToneWarn, []string{"Vamos tentar de novo."}, []string{"OK"}, 0, nil)
 	}
+	in.Password = askPassword(ui, recover)
 
 	// 6. Rede (só cabo nesta versão)
-	for !*dry && !hasNetwork() {
+	for !dry && !hasNetwork() {
 		if ui.Choose("Sem conexão de rede", ToneWarn, []string{
 			"Conecte este computador ao roteador com um cabo de rede.",
 			"",
@@ -207,7 +185,7 @@ func main() {
 
 	// 7. Instalação
 	ui.Stage(StageInstall)
-	in := &Installer{Layout: layout, Name: name, Password: pass, Plan: plan, DryRun: *dry}
+	in.Layout = layout
 	for {
 		err = in.Run(func(step int) {
 			ui.Progress("Instalando o Backeddy Server", Steps, step, "Não desligue o computador.")
@@ -217,8 +195,7 @@ func main() {
 		}
 		if ui.Choose("Algo deu errado", ToneDanger, []string{err.Error(), "", "Detalhes em " + logPath + "."},
 			[]string{"Tentar de novo", "Desligar"}, 0, nil) == 1 {
-			powerOff(*dry, ui)
-			return
+			return errOff
 		}
 	}
 	ui.Progress("Instalando o Backeddy Server", Steps, len(Steps), "")
@@ -226,14 +203,19 @@ func main() {
 	// 8. Pronto: Enter reinicia; tirar o pendrive também
 	ui.Stage(StageDone)
 	var removed <-chan struct{}
-	if !*dry {
+	if !dry {
 		removed = watchInstallerRemoval()
 	}
-	r := ui.Choose("Pronto!", ToneOK, DoneLines, []string{"Reiniciar"}, 0, removed)
-	if *dry {
+	lines := DoneLines
+	if recover {
+		lines = append([]string{}, DoneLines...)
+		lines[len(lines)-1] = "Depois disso, os Macs e PCs voltam a fazer backup sozinhos. Se você trocou a senha, cada Mac vai pedir a nova."
+	}
+	r := ui.Choose("Pronto!", ToneOK, lines, []string{"Reiniciar"}, 0, removed)
+	if dry {
 		ui.Close()
 		fmt.Println("dry-run: comandos registrados em", logPath)
-		return
+		return nil
 	}
 	if r == -1 {
 		// o pendrive saiu: o sistema do instalador sumiu junto, então reinicia direto pelo kernel
@@ -246,6 +228,198 @@ func main() {
 	if exec.Command("systemctl", "reboot").Run() != nil {
 		syscall.Sync()
 		_ = syscall.Reboot(syscall.LINUX_REBOOT_CMD_RESTART)
+	}
+	return nil
+}
+
+// chooseLayout: tela de modos (cartões) + Manual + avisos de risco. Volta aqui até a pessoa decidir.
+func chooseLayout(ui Frontend, disks []Disk) (*Layout, error) {
+	opts, notes, err := Options(disks)
+	sel := 0
+	for {
+		var layout *Layout
+		manual := err != nil
+		if !manual {
+			cards := make([]Card, len(opts))
+			for i, o := range opts {
+				cards[i] = Card{Title: o.Title, Value: HumanSize(o.Usable), Desc: o.Desc, Risk: o.Risk, Recommended: i == 0}
+			}
+			lines := Explain(opts[0])
+			for _, n := range notes {
+				lines = append(lines, "", n)
+			}
+			c, b := ui.Cards("Como usar os discos", lines, cards, sel, []string{"Continuar", "Escolher os discos à mão", "Desligar"})
+			sel = c
+			switch b {
+			case 2:
+				return nil, errOff
+			case 1:
+				manual = true
+			default:
+				layout = opts[c]
+			}
+		} else if ui.Choose("Escolha os discos à mão", ToneWarn, []string{
+			"Não encontrei um arranjo automático: " + err.Error() + ".",
+			"Dá para escolher o papel de cada disco à mão.",
+		}, []string{"Escolher os discos", "Desligar"}, 0, nil) != 0 {
+			return nil, errOff
+		}
+
+		if manual {
+			ds := usable(disks)
+			sortDisks(ds)
+			var rec *Layout
+			if len(opts) > 0 {
+				rec = opts[0]
+			}
+			roles, mirror, ok := ui.Manual("Escolher os discos à mão", []string{
+				"Para cada disco: Sistema, Backup, Sistema + backup ou Não usar (fica intocado).",
+			}, ds, DefaultRoles(ds, rec), rec == nil || rec.Mirror, func(r []Role, m bool) ([]string, bool) {
+				l, e := ManualLayout(ds, r, m)
+				if e != nil {
+					return []string{"!" + strings.ToUpper(e.Error()[:1]) + e.Error()[1:] + "."}, false
+				}
+				out := append([]string{}, l.Summary...)
+				if m && !l.Mirror {
+					out = append(out, "!Espelho precisa de 2 lugares para backup: ficou sem.")
+				}
+				return out, true
+			})
+			if !ok {
+				if err != nil {
+					return nil, errOff
+				}
+				continue
+			}
+			layout, _ = ManualLayout(ds, roles, mirror)
+		}
+		if acceptRisk(ui, layout) {
+			return layout, nil
+		}
+	}
+}
+
+// acceptRisk: amarelo = uma tela de aviso; vermelho = aviso + digitar CONTINUAR.
+func acceptRisk(ui Frontend, l *Layout) bool {
+	if l.Risk == RiskRed {
+		return redBarrier(ui, append(append([]string{}, l.Reds...), l.Summary...))
+	}
+	if l.Risk == RiskYellow {
+		lines := append([]string{}, l.Summary...)
+		lines = append(lines, "",
+			"Se um disco morrer, você perde o histórico de backups. Os arquivos nos Macs e PCs continuam, e o servidor recomeça do zero.")
+		if l.Mode != ModeOneDisk {
+			lines = append(lines, "", "Dá para ligar o espelho depois, sem reinstalar, se houver espaço livre: sudo backeddy mirror")
+		} else {
+			lines = append(lines, "", "Um segundo disco pode entrar depois e virar espelho, sem reinstalar: sudo backeddy add-disk")
+		}
+		return ui.Choose("Sem proteção contra disco quebrado", ToneWarn, lines, []string{"Entendi, continuar", "Voltar"}, 0, nil) == 0
+	}
+	return true
+}
+
+func redBarrier(ui Frontend, lines []string) bool {
+	if ui.Choose("Isso não é recomendado", ToneDanger, lines, []string{"Voltar", "Continuar mesmo assim"}, 0, nil) != 1 {
+		return false
+	}
+	return typed(ui, "Tem certeza?", []string{"Para seguir mesmo assim, digite CONTINUAR. Para voltar, digite SAIR."}, "CONTINUAR")
+}
+
+// typed pede uma palavra; SAIR desiste.
+func typed(ui Frontend, title string, lines []string, word string) bool {
+	for {
+		v := ui.Input(title, lines, "Digite:", "", false)
+		if v == word {
+			return true
+		}
+		if strings.EqualFold(v, "SAIR") {
+			return false
+		}
+	}
+}
+
+func checkPlan(ui Frontend, plan *Plan, perr error, l *Layout) bool {
+	if perr != nil {
+		if ui.Choose("Não consegui ler o plano do pendrive", ToneWarn, []string{perr.Error(), "", "Dá para seguir sem ele."},
+			[]string{"Continuar", "Desligar"}, 0, nil) != 0 {
+			return false
+		}
+	}
+	switch plan.Check(l.Usable) {
+	case FitYellow:
+		return ui.Choose("Cabe, mas com pouco histórico", ToneWarn, []string{
+			fmt.Sprintf("Espaço para backups: %s. Recomendado no plano: %s.", HumanSize(l.Usable), HumanSize(plan.RecommendedBytes)),
+			"",
+			"Os backups vão funcionar, mas o servidor vai guardar menos tempo de histórico.",
+			"Para guardar mais, use um disco de " + HumanSize(plan.RecommendedBytes) + " ou maior, ou o modo Mais espaço.",
+		}, []string{"Continuar", "Desligar"}, 0, nil) == 0
+	case FitRed:
+		if ui.Choose("O espaço não é suficiente", ToneDanger, []string{
+			fmt.Sprintf("Quando você criou este pendrive, o recomendado era pelo menos %s.", HumanSize(plan.MinBytes)),
+			fmt.Sprintf("Este arranjo só tem %s para backups.", HumanSize(l.Usable)),
+			"",
+			"Sugestão: instale um disco de " + HumanSize(plan.RecommendedBytes) + " ou maior e comece de novo.",
+		}, []string{"Desligar", "Continuar mesmo assim"}, 0, nil) != 1 {
+			return false
+		}
+		return typed(ui, "Tem certeza?", []string{
+			fmt.Sprintf("Com %s, %s não vão caber juntos.", HumanSize(l.Usable), plan.ComputerNames()),
+			"Quando o disco encher, algum computador vai parar de fazer backup.",
+			"",
+			"Para seguir mesmo assim, digite CONTINUAR. Para desistir, digite SAIR.",
+		}, "CONTINUAR")
+	}
+	return true
+}
+
+func confirmErase(ui Frontend, l *Layout) bool {
+	var dl []string
+	for _, d := range l.AllDisks() {
+		dl = append(dl, "• "+d.Label()+d.EraseNote())
+	}
+	warn := append([]string{"Estes discos vão ser apagados por completo:", ""}, dl...)
+	warn = append(warn, "", "Windows, fotos, documentos: tudo o que estiver nesses discos será apagado para sempre.")
+	for _, w := range l.Warns {
+		warn = append(warn, "!"+w)
+	}
+	if ui.Choose("Atenção: estes discos vão ser apagados", ToneDanger, warn, []string{"Entendi, continuar", "Desligar"}, 1, nil) != 0 {
+		return false
+	}
+	return typed(ui, "Confirme que pode apagar", append([]string{"Último aviso. Discos que serão apagados:", ""}, dl...), "APAGAR")
+}
+
+func askWhoUses(ui Frontend) int {
+	c, _ := ui.Cards("Quem vai fazer backup aqui?", []string{"Assim o espaço é dividido do jeito certo. Dá para mudar depois."}, []Card{
+		{Title: "Macs e PCs", Desc: "60% do espaço para o Time Machine dos Macs, 40% para os PCs.", Plain: true},
+		{Title: "Só Macs", Desc: "85% do espaço para o Time Machine.", Plain: true},
+		{Title: "Só PCs com Windows", Desc: "90% do espaço para os PCs.", Plain: true},
+	}, 0, []string{"Continuar"})
+	return []int{60, 85, 10}[c]
+}
+
+func askPassword(ui Frontend, recover bool) string {
+	intro := []string{
+		"Macs e PCs vão usar esta senha para fazer backup.",
+		"Ela também serve para administrar o servidor (usuário: admin).",
+		"Mínimo de 6 caracteres.",
+	}
+	if recover {
+		intro = []string{
+			"Use a mesma senha de antes: assim os Macs continuam sem pedir nada.",
+			"Se usar uma nova, cada Mac vai pedir a senha nova uma vez.",
+			"Mínimo de 6 caracteres.",
+		}
+	}
+	for {
+		p1 := ui.Input("Senha do servidor", intro, "Senha:", "", true)
+		if len([]rune(p1)) < 6 {
+			continue
+		}
+		p2 := ui.Input("Senha do servidor", []string{"Digite a senha de novo, para conferir."}, "Senha:", "", true)
+		if p1 == p2 {
+			return p1
+		}
+		ui.Choose("As senhas não conferem", ToneWarn, []string{"Vamos tentar de novo."}, []string{"OK"}, 0, nil)
 	}
 }
 

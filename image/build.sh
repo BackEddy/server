@@ -54,7 +54,7 @@ ls -lh "$W/rootfs.tar.zst"
 
 log "2/3 Sistema do instalador"
 INST_PKGS="linux-image-amd64,systemd-sysv,udev,kmod,util-linux,gdisk,parted,dosfstools,e2fsprogs,btrfs-progs,\
-zstd,tar,kbd,console-setup-linux,iproute2,iputils-ping,procps,less,shim-signed,grub-efi-amd64-signed,$FIRMWARE"
+zstd,tar,kbd,console-setup-linux,iproute2,iputils-ping,procps,less,smartmontools,shim-signed,grub-efi-amd64-signed,$FIRMWARE"
 INST="$W/installer-root"
 mmdebstrap --variant=important --include="$INST_PKGS" \
   --customize-hook='bash "$REPO/image/customize-installer.sh" "$1"' \

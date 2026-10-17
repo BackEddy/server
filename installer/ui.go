@@ -45,7 +45,40 @@ type Frontend interface {
 	Progress(title string, steps []string, current int, note string)
 	// Notice mostra uma mensagem sem esperar tecla.
 	Notice(title string, tone Tone, lines []string)
+	// Cards: escolha entre cartões (↑↓) e botões (←→). Devolve o cartão marcado e o botão apertado.
+	Cards(title string, lines []string, cards []Card, sel int, btns []string) (card, btn int)
+	// Manual: papel de cada disco + espelho. ok=false = Voltar.
+	Manual(title string, lines []string, disks []Disk, roles []Role, mirror bool,
+		preview func([]Role, bool) ([]string, bool)) ([]Role, bool, bool)
 	Close()
+}
+
+type Card struct {
+	Title, Value, Desc string
+	Risk               Risk
+	Recommended        bool
+	Plain              bool // sem selo de risco (escolhas que não envolvem risco)
+}
+
+func riskLabel(r Risk) string {
+	switch r {
+	case RiskGreen:
+		return "Protegido"
+	case RiskYellow:
+		return "Sem proteção"
+	}
+	return "Desaconselhado"
+}
+
+// nextRole: próximo papel permitido (dir = +1 ou -1).
+func nextRole(d Disk, cur Role, dir int) Role {
+	al := AllowedRoles(d)
+	for i, r := range al {
+		if r == cur {
+			return al[(i+dir+len(al))%len(al)]
+		}
+	}
+	return al[0]
 }
 
 // ---------- teclado (compartilhado pelas duas interfaces) ----------
@@ -59,6 +92,10 @@ const (
 	kRight
 	kBack
 	kChar
+	kUp
+	kDown
+	kEsc
+	kTab
 )
 
 type keyEvent struct {
@@ -114,14 +151,20 @@ func parseKey(b []byte) (key, string) {
 	case b[0] == '\r' || b[0] == '\n':
 		return kEnter, ""
 	case b[0] == '\t':
-		return kRight, ""
+		return kTab, ""
+	case n == 1 && b[0] == 0x1b:
+		return kEsc, ""
 	case b[0] == 127 || b[0] == 8:
 		return kBack, ""
 	case n >= 3 && b[0] == 0x1b && b[1] == '[':
 		switch b[2] {
-		case 'C', 'B':
+		case 'A':
+			return kUp, ""
+		case 'B':
+			return kDown, ""
+		case 'C':
 			return kRight, ""
-		case 'D', 'A':
+		case 'D':
 			return kLeft, ""
 		}
 		return kOther, ""
@@ -129,6 +172,17 @@ func parseKey(b []byte) (key, string) {
 		return kChar, string(b)
 	}
 	return kOther, ""
+}
+
+// horiz: nas telas só com botões, cima/baixo/Tab também trocam o botão.
+func horiz(k key) key {
+	switch k {
+	case kUp:
+		return kLeft
+	case kDown, kTab:
+		return kRight
+	}
+	return k
 }
 
 // nextKey espera uma tecla; ok=false se abort disparou (ou o teclado sumiu).
@@ -288,7 +342,7 @@ func (u *TextUI) Choose(title string, t Tone, lines []string, btns []string, def
 		if !ok {
 			return -1
 		}
-		switch e.k {
+		switch horiz(e.k) {
 		case kLeft:
 			sel = (sel - 1 + len(btns)) % len(btns)
 		case kRight:
@@ -349,6 +403,115 @@ func (u *TextUI) Progress(title string, steps []string, current int, note string
 func (u *TextUI) Notice(title string, t Tone, lines []string) {
 	u.header(title, t)
 	u.body(lines)
+}
+
+func (u *TextUI) Cards(title string, lines []string, cards []Card, sel int, btns []string) (int, int) {
+	b := 0
+	for {
+		u.header(title, ToneNormal)
+		u.body(lines)
+		fmt.Print("\r\n")
+		for i, c := range cards {
+			mark, st := "   ", ""
+			if i == sel {
+				mark, st = cyan+bold+" ▸ ", bold
+			}
+			col := green
+			if c.Risk == RiskYellow {
+				col = yellow
+			} else if c.Risk == RiskRed {
+				col = red
+			}
+			rec := ""
+			if c.Recommended {
+				rec = " (recomendado)"
+			}
+			tag := "  " + col + "[" + riskLabel(c.Risk) + "]" + reset
+			if c.Plain {
+				tag = ""
+			}
+			u.p(mark + st + c.Title + rec + reset + "  " + bold + c.Value + reset + tag)
+			for _, w := range wrap(c.Desc, u.width()-6) {
+				u.p("      " + esc + "2m" + w + reset)
+			}
+		}
+		u.buttons(btns, b)
+		u.p(esc + "2m" + "↑↓ escolhe o modo" + reset)
+		e, ok := nextKey(nil)
+		if !ok {
+			return sel, 0
+		}
+		switch e.k {
+		case kUp:
+			sel = (sel - 1 + len(cards)) % len(cards)
+		case kDown:
+			sel = (sel + 1) % len(cards)
+		case kLeft:
+			b = (b - 1 + len(btns)) % len(btns)
+		case kRight, kTab:
+			b = (b + 1) % len(btns)
+		case kEnter:
+			return sel, b
+		}
+	}
+}
+
+func (u *TextUI) Manual(title string, lines []string, disks []Disk, roles []Role, mirror bool,
+	preview func([]Role, bool) ([]string, bool)) ([]Role, bool, bool) {
+	roles = append([]Role{}, roles...)
+	row := 0
+	for {
+		u.header(title, ToneNormal)
+		u.body(lines)
+		fmt.Print("\r\n")
+		for i, d := range disks {
+			mark := "   "
+			if i == row {
+				mark = cyan + bold + " ▸ " + reset
+			}
+			u.p(mark + d.Label() + d.EraseNote() + "  " + reverse + " " + roles[i].String() + " " + reset)
+		}
+		mark := "   "
+		if row == len(disks) {
+			mark = cyan + bold + " ▸ " + reset
+		}
+		mv := "Não"
+		if mirror {
+			mv = "Sim"
+		}
+		u.p(mark + "Espelhar os backups (cada arquivo em 2 discos)  " + reverse + " " + mv + " " + reset)
+		pl, valid := preview(roles, mirror)
+		fmt.Print("\r\n")
+		u.body(pl)
+		fmt.Print("\r\n")
+		u.p(esc + "2m" + "↑↓ escolhe · ←→ muda · Enter continua · Esc volta" + reset)
+		e, ok := nextKey(nil)
+		if !ok {
+			return roles, mirror, false
+		}
+		switch e.k {
+		case kUp:
+			row = (row - 1 + len(disks) + 1) % (len(disks) + 1)
+		case kDown, kTab:
+			row = (row + 1) % (len(disks) + 1)
+		case kLeft, kRight:
+			dir := 1
+			if e.k == kLeft {
+				dir = -1
+			}
+			if row < len(disks) {
+				roles[row] = nextRole(disks[row], roles[row], dir)
+			} else {
+				mirror = !mirror
+			}
+		case kEnter:
+			if valid {
+				return roles, mirror, true
+			}
+		case kEsc:
+			return roles, mirror, false
+		}
+	}
 }
 
 func wrap(s string, width int) []string {

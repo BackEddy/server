@@ -55,7 +55,30 @@ type GUI struct {
 	mu       sync.Mutex
 	animStop chan struct{}
 	animDone chan struct{}
+
+	// mouse
+	hits     []hit
+	hover    int
+	frame    *image.RGBA // último quadro sem o cursor
+	mouse    *mouseState
+	curShown bool
+	curRect  image.Rectangle
+
+	btnLeft, lastRight float64
 }
+
+type hit struct {
+	r  image.Rectangle
+	id int
+}
+
+const (
+	hitBtn    = 100 // + índice do botão
+	hitCard   = 200 // + índice do cartão
+	hitRow    = 300 // + índice da linha (disco) no Manual
+	hitRole   = 400 // + índice do seletor de papel
+	hitMirror = 500
+)
 
 // NewGUI abre a tela gráfica; erro = usar o modo texto.
 func NewGUI() (*GUI, error) {
@@ -65,6 +88,7 @@ func NewGUI() (*GUI, error) {
 	}
 	g := newGUI(fb.W, fb.H)
 	g.fb = fb
+	g.mouse = startMouse(fb.W, fb.H)
 	return g, nil
 }
 
@@ -165,6 +189,7 @@ func clipRRectRow(x, y, w, h, r, y0, y1 float64) []pt {
 // ---------- quadro base ----------
 
 func (g *GUI) begin() {
+	g.hits = g.hits[:0]
 	copy(g.img.Pix, g.chrome.Pix)
 	// etapas na lateral
 	y := titleH + 34 + 76 + 46
@@ -186,6 +211,11 @@ func (g *GUI) show() {
 	if g.fb != nil {
 		g.fb.Show(g.img)
 	}
+}
+
+// addHit registra uma área clicável (coordenadas lógicas).
+func (g *GUI) addHit(x, y, w, h float64, id int) {
+	g.hits = append(g.hits, hit{image.Rect(int(g.X(x)), int(g.Y(y)), int(g.X(x+w)), int(g.Y(y+h))), id})
 }
 
 func (g *GUI) contentX() float64 { return sideW + padX }
@@ -267,28 +297,45 @@ func (g *GUI) body(lines []string, y float64) float64 {
 }
 
 // buttons: o primeiro da lista é o principal e fica mais à direita (como no Mac).
+// Guarda em g.btnLeft onde termina a fileira (a dica de teclado só aparece se couber).
 func (g *GUI) buttons(btns []string, sel int) {
+	defer func() { g.btnLeft = g.lastRight }()
 	f := face(true, g.L(14))
 	right := winW - 28
 	top := winH - 28 - 34
 	for i, b := range btns {
 		w := math.Max(104, textWidth(f, b)/g.s+40)
 		x := right - w
+		hov := g.hover == hitBtn+i
+		g.addHit(x, top, w, 34, hitBtn+i)
 		if i == sel {
 			fillRRect(g.img, g.X(x)-g.L(3.5), g.Y(top)-g.L(3.5), g.L(w)+g.L(7), g.L(34)+g.L(7), g.L(10), alpha(cAccent, 0.32))
-			fillRRect(g.img, g.X(x), g.Y(top), g.L(w), g.L(34), g.L(7.5), cAccent)
+			col := cAccent
+			if hov {
+				col = hex(0x0066DD)
+			}
+			fillRRect(g.img, g.X(x), g.Y(top), g.L(w), g.L(34), g.L(7.5), col)
 			textCentered(g.img, f, g.X(x+w/2), g.Y(top+22), b, cWindow)
 		} else {
-			fillRRect(g.img, g.X(x)-1, g.Y(top)-1, g.L(w)+2, g.L(34)+2, g.L(7.5)+1, cBorder)
-			fillRRect(g.img, g.X(x), g.Y(top), g.L(w), g.L(34), g.L(7.5), cWindow)
+			border, bg := cBorder, cWindow
+			if hov {
+				border, bg = hex(0x8E8E93), hex(0xF2F2F7)
+			}
+			fillRRect(g.img, g.X(x)-1, g.Y(top)-1, g.L(w)+2, g.L(34)+2, g.L(7.5)+1, border)
+			fillRRect(g.img, g.X(x), g.Y(top), g.L(w), g.L(34), g.L(7.5), bg)
 			textCentered(g.img, f, g.X(x+w/2), g.Y(top+22), b, cText)
 		}
 		right = x - 14
+		g.lastRight = right
 	}
 }
 
 func (g *GUI) hint(s string) {
-	text(g.img, face(false, g.L(12.5)), g.X(g.contentX()), g.Y(winH-28-12), s, cText3)
+	f := face(false, g.L(12.5))
+	if g.btnLeft > 0 && g.contentX()+textWidth(f, s)/g.s+12 > g.btnLeft {
+		return // não cabe ao lado dos botões
+	}
+	text(g.img, f, g.X(g.contentX()), g.Y(winH-28-12), s, cText3)
 }
 
 // ---------- telas ----------
@@ -298,9 +345,9 @@ func (g *GUI) drawChoose(title string, tone Tone, lines, btns []string, sel int)
 	g.body(lines, g.title(title, tone))
 	g.buttons(btns, sel)
 	if len(btns) > 1 {
-		g.hint("← →  escolher      Enter  confirmar")
+		g.hint("Clique, ou ← →  e  Enter")
 	} else {
-		g.hint("Enter  confirmar")
+		g.hint("Clique, ou Enter")
 	}
 }
 
@@ -408,19 +455,25 @@ func (g *GUI) Choose(title string, tone Tone, lines []string, btns []string, def
 	for {
 		g.mu.Lock()
 		g.drawChoose(title, tone, lines, btns, sel)
-		g.show()
+		g.present()
 		g.mu.Unlock()
-		e, ok := nextKey(abort)
-		if !ok {
+		ev := g.wait(abort)
+		switch ev.kind {
+		case evAbort:
 			return -1
-		}
-		switch e.k {
-		case kLeft: // botões aparecem em ordem inversa (principal à direita)
-			sel = (sel + 1) % len(btns)
-		case kRight:
-			sel = (sel - 1 + len(btns)) % len(btns)
-		case kEnter:
-			return sel
+		case evClick:
+			if ev.id >= hitBtn && ev.id < hitBtn+len(btns) {
+				return ev.id - hitBtn
+			}
+		case evKey:
+			switch horiz(ev.key.k) {
+			case kLeft: // botões aparecem em ordem inversa (principal à direita)
+				sel = (sel + 1) % len(btns)
+			case kRight:
+				sel = (sel - 1 + len(btns)) % len(btns)
+			case kEnter:
+				return sel
+			}
 		}
 	}
 }
@@ -431,11 +484,20 @@ func (g *GUI) Input(title string, lines []string, label, initial string, masked 
 	for {
 		g.mu.Lock()
 		g.drawInput(title, lines, label, val, masked, errMsg)
-		g.show()
+		g.present()
 		g.mu.Unlock()
-		e, ok := nextKey(nil)
-		if !ok {
+		ev := g.wait(nil)
+		e := ev.key
+		switch ev.kind {
+		case evAbort:
 			return val
+		case evClick:
+			if ev.id != hitBtn {
+				continue
+			}
+			e = keyEvent{k: kEnter}
+		case evHover:
+			continue
 		}
 		var done bool
 		if val, done, errMsg = editValue(val, e); done {
@@ -449,7 +511,7 @@ func (g *GUI) Progress(title string, steps []string, current int, note string) {
 	g.stopAnim()
 	g.mu.Lock()
 	g.drawProgress(title, steps, current, note, 0)
-	g.show()
+	g.present()
 	g.mu.Unlock()
 	if current >= len(steps) || g.fb == nil {
 		return
@@ -467,7 +529,7 @@ func (g *GUI) Progress(title string, steps []string, current int, note string) {
 			case <-t.C:
 				g.mu.Lock()
 				g.drawProgress(title, steps, current, note, tick)
-				g.show()
+				g.present()
 				g.mu.Unlock()
 			}
 		}
@@ -479,7 +541,7 @@ func (g *GUI) Notice(title string, tone Tone, lines []string) {
 	g.mu.Lock()
 	g.begin()
 	g.body(lines, g.title(title, tone))
-	g.show()
+	g.present()
 	g.mu.Unlock()
 }
 

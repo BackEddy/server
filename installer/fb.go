@@ -131,20 +131,24 @@ func chan8(v uint8, bf fbBitfield) uint32 {
 }
 
 // Show copia a imagem (mesmo tamanho da tela) para o framebuffer.
-func (fb *Framebuffer) Show(img *image.RGBA) {
+func (fb *Framebuffer) Show(img *image.RGBA) { fb.ShowRect(img, img.Bounds()) }
+
+// ShowRect copia só um pedaço da imagem (ex.: a área do cursor do mouse).
+func (fb *Framebuffer) ShowRect(img *image.RGBA, r image.Rectangle) {
+	r = r.Intersect(image.Rect(0, 0, fb.W, fb.H))
 	fast := fb.bpp == 32 && fb.r.Offset == 16 && fb.g.Offset == 8 && fb.b.Offset == 0 &&
 		fb.r.Length == 8 && fb.g.Length == 8 && fb.b.Length == 8
-	for y := 0; y < fb.H; y++ {
+	for y := r.Min.Y; y < r.Max.Y; y++ {
 		src := img.Pix[y*img.Stride : y*img.Stride+fb.W*4]
 		row := fb.mem[fb.base+y*fb.stride:]
 		switch {
 		case fast: // BGRX, o caso de quase todo PC
-			for x := 0; x < fb.W; x++ {
+			for x := r.Min.X; x < r.Max.X; x++ {
 				row[x*4], row[x*4+1], row[x*4+2], row[x*4+3] = src[x*4+2], src[x*4+1], src[x*4], 0xff
 			}
 		default:
 			bytes := fb.bpp / 8
-			for x := 0; x < fb.W; x++ {
+			for x := r.Min.X; x < r.Max.X; x++ {
 				p := chan8(src[x*4], fb.r) | chan8(src[x*4+1], fb.g) | chan8(src[x*4+2], fb.b)
 				for i := 0; i < bytes; i++ {
 					row[x*bytes+i] = byte(p >> (8 * i))
