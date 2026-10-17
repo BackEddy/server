@@ -21,7 +21,7 @@
 # Pode ser rodado de novo com segurança: reaplica as configurações.
 set -euo pipefail
 
-VERSION="0.6.1"
+VERSION="0.6.2"
 NAME="Backup da Casa"
 DISKS=()
 MIRROR=1
@@ -350,7 +350,7 @@ install -d /etc/systemd/system/getty@tty1.service.d
 install -m 0644 "$SRC/config/getty-backeddy.conf" /etc/systemd/system/getty@tty1.service.d/backeddy.conf
 systemctl daemon-reload
 systemctl enable backeddy-issue.service backeddy-issue.timer >/dev/null 2>&1
-systemctl start backeddy-issue.timer >/dev/null 2>&1 || true
+systemctl start --no-block backeddy-issue.timer >/dev/null 2>&1 || true
 # vigia: alertas com bipe até alguém reconhecer (o binário vem pronto na imagem do pendrive/VM)
 if [ -x "$SRC/bin/backeddy-agent" ]; then
   install -m 0755 "$SRC/bin/backeddy-agent" /usr/local/sbin/backeddy-agent
@@ -358,7 +358,7 @@ if [ -x "$SRC/bin/backeddy-agent" ]; then
   [ -f "$ETC/alerts.conf" ] || printf 'QUIET_START=22\nQUIET_END=8\n' > "$ETC/alerts.conf"
   systemctl daemon-reload
   systemctl enable backeddy-agent >/dev/null 2>&1 || true
-  systemctl restart backeddy-agent >/dev/null 2>&1 || true
+  systemctl restart --no-block backeddy-agent >/dev/null 2>&1 || true
   ok "Alertas: o servidor bipa se algo der errado (sem bipe das 22h às 8h)"
 else
   echo "  Aviso: vigia de alertas não incluído (compile agent/ com Go para ter os bipes)."
@@ -367,7 +367,8 @@ fi
 install -m 0644 "$SRC/config/backeddy-space.service" /etc/systemd/system/backeddy-space.service
 install -m 0644 "$SRC/config/backeddy-space.timer" /etc/systemd/system/backeddy-space.timer
 systemctl daemon-reload
-systemctl enable --now backeddy-space.timer >/dev/null 2>&1 || true
+systemctl enable backeddy-space.timer >/dev/null 2>&1 || true
+systemctl start --no-block backeddy-space.timer >/dev/null 2>&1 || true
 /usr/local/bin/backeddy space >/dev/null 2>&1 || true
 /usr/local/bin/backeddy issue >/dev/null 2>&1 || true
 ok "Tela do servidor mostra a situação e como conectar"

@@ -211,10 +211,10 @@ $Usb = Join-Path $Dir "pendrive.$Ext"
 Copy-Item -Force $Imagem $Usb      # cópia: a original fica intacta para reinstalar
 Log "pendrive: $Usb (de $Imagem)"
 
-# ---------- 4. Discos: sistema (20 GB) e backups ----------
+# ---------- 4. Discos: sistema (24 GB) e backups ----------
 $Sys = Join-Path $Dir "sistema.$Ext"
 $Data = Join-Path $Dir "backups.$Ext"
-foreach ($pair in @(@($Sys, 20), @($Data, $cfg.SizeGB))) {
+foreach ($pair in @(@($Sys, 24), @($Data, $cfg.SizeGB))) {
     if (Test-Path $pair[0]) { Remove-Item -Force $pair[0] }
     if ($Motor -eq "hyperv") { New-VHD -Path $pair[0] -SizeBytes ([int64]$pair[1] * 1GB) -Dynamic | Out-Null }
     else { VBM createmedium disk --filename $pair[0] --size ([int64]$pair[1] * 1024) --format VDI --variant Standard | Out-Null }

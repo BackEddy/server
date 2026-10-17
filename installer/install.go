@@ -141,9 +141,14 @@ func (in *Installer) partition() error {
 			return err
 		}
 	}
+	// disco só do sistema: a partição do sistema ocupa o disco inteiro; dividido: 20 GB
+	rootEnd := "0"
+	if shared {
+		rootEnd = "+20G"
+	}
 	args := []string{
 		"-n1:0:+512M", "-t1:ef00", "-c1:EFI",
-		"-n2:0:+20G", "-t2:8304", "-c2:backeddy-root",
+		"-n2:0:" + rootEnd, "-t2:8304", "-c2:backeddy-root",
 	}
 	if shared {
 		u := newUUID()

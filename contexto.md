@@ -185,6 +185,14 @@ via QR); x86 64 bits apenas (Debian 13 sem i386; Kopia sem binário 32 bits).
   bipe (pergunta só o silêncio à noite). /api/hello (sem senha) devolve nome/slug para o Windows.
 - O Windows acha a VM pelo IP do Hyper-V ou pelo MAC na tabela ARP (com "ping" na rede /24).
 
+### 0.6.2 — correções do teste da 0.6.1 (17/10/2026)
+- Disco do sistema de 20 GB não cabia (EFI 512M + root 20G fixo): root agora ocupa o disco inteiro quando o
+  disco é só do sistema; o instalador do Windows cria 24 GB.
+- Primeiro boot travava com 0% de CPU (também na VM de imagem pronta): impasse do systemd — o install.sh
+  esperava "systemctl restart backeddy-agent", e o vigia tinha After=multi-user.target, que só chega depois
+  do primeiro boot. Vigia agora After=network.target e o install.sh liga serviços novos com --no-block.
+- Próxima rodada: silêncio à noite com horário digitado (instalador e painel); .exe único; releases.
+
 ### Plano de construção
 | Fase | Conteúdo | Situação |
 | --- | --- | --- |

@@ -1,6 +1,7 @@
 [Unit]
 Description=Backeddy: vigia (alertas com bipe até alguém reconhecer)
-After=multi-user.target
+# não esperar o multi-user.target: o primeiro boot liga este serviço antes de o boot terminar
+After=network.target
 ConditionPathExists=/etc/backeddy/server.conf
 
 [Service]
