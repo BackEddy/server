@@ -63,11 +63,11 @@ type Card struct {
 func riskLabel(r Risk) string {
 	switch r {
 	case RiskGreen:
-		return "Protegido"
+		return T("Protegido")
 	case RiskYellow:
-		return "Sem proteção"
+		return T("Sem proteção")
 	}
-	return "Desaconselhado"
+	return T("Desaconselhado")
 }
 
 // nextRole: próximo papel permitido (dir = +1 ou -1).
@@ -201,7 +201,7 @@ func editValue(val string, e keyEvent) (string, bool, string) {
 	switch e.k {
 	case kEnter:
 		if strings.TrimSpace(val) == "" {
-			return val, false, "Não pode ficar em branco."
+			return val, false, T("Não pode ficar em branco.")
 		}
 		return val, true, ""
 	case kBack:
@@ -329,7 +329,7 @@ func (u *TextUI) buttons(btns []string, sel int) {
 	}
 	u.p(b.String())
 	fmt.Print("\r\n")
-	u.p(esc + "2m" + "Setas para escolher · Enter para confirmar" + reset)
+	u.p(esc + "2m" + T("Setas para escolher · Enter para confirmar") + reset)
 }
 
 func (u *TextUI) Choose(title string, t Tone, lines []string, btns []string, def int, abort <-chan struct{}) int {
@@ -369,7 +369,7 @@ func (u *TextUI) Input(title string, lines []string, label, initial string, mask
 			u.p(red + errMsg + reset)
 		}
 		fmt.Print("\r\n")
-		u.p(esc + "2m" + "Digite e aperte Enter · Backspace apaga" + reset)
+		u.p(esc + "2m" + T("Digite e aperte Enter · Backspace apaga") + reset)
 		e, ok := nextKey(nil)
 		if !ok {
 			return val
@@ -424,7 +424,7 @@ func (u *TextUI) Cards(title string, lines []string, cards []Card, sel int, btns
 			}
 			rec := ""
 			if c.Recommended {
-				rec = " (recomendado)"
+				rec = T(" (recomendado)")
 			}
 			tag := "  " + col + "[" + riskLabel(c.Risk) + "]" + reset
 			if c.Plain {
@@ -436,7 +436,7 @@ func (u *TextUI) Cards(title string, lines []string, cards []Card, sel int, btns
 			}
 		}
 		u.buttons(btns, b)
-		u.p(esc + "2m" + "↑↓ escolhe o modo" + reset)
+		u.p(esc + "2m" + T("↑↓ escolhe o modo") + reset)
 		e, ok := nextKey(nil)
 		if !ok {
 			return sel, 0
@@ -475,16 +475,16 @@ func (u *TextUI) Manual(title string, lines []string, disks []Disk, roles []Role
 		if row == len(disks) {
 			mark = cyan + bold + " ▸ " + reset
 		}
-		mv := "Não"
+		mv := T("Não")
 		if mirror {
-			mv = "Sim"
+			mv = T("Sim")
 		}
-		u.p(mark + "Espelhar os backups (cada arquivo em 2 discos)  " + reverse + " " + mv + " " + reset)
+		u.p(mark + T("Espelhar os backups (cada arquivo em 2 discos)  ") + reverse + " " + mv + " " + reset)
 		pl, valid := preview(roles, mirror)
 		fmt.Print("\r\n")
 		u.body(pl)
 		fmt.Print("\r\n")
-		u.p(esc + "2m" + "↑↓ escolhe · ←→ muda · Enter continua · Esc volta" + reset)
+		u.p(esc + "2m" + T("↑↓ escolhe · ←→ muda · Enter continua · Esc volta") + reset)
 		e, ok := nextKey(nil)
 		if !ok {
 			return roles, mirror, false

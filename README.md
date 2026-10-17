@@ -4,7 +4,15 @@
 
 <p align="center"><b>Turn any old PC into a backup server for your Macs (Time Machine) and Windows PCs.</b></p>
 
-> **Status: early preview (0.6).** Two ways to install: the **USB installer image** (plug into an old PC, follow a graphical installer with mouse or keyboard, type a password, done — UEFI and wired network only for now) or the **install script** on a fresh Debian. Soon the Backeddy app will create the USB stick for you.
+> **Status: community preview (0.8).** Setup, the server screen, alerts and the web panel speak **English, Português and Español**. New to all this? The [Backeddy for Mac page](https://github.com/BackEddy/mac#readme) explains Time Machine, backup servers and virtual machines in plain words.
+
+## Get it
+
+- **A spare PC or laptop (it gets erased):** write the USB drive with the [Backeddy for Mac](https://github.com/BackEddy/mac/releases/latest) app (or balenaEtcher with `backeddy-server-*.img.xz` from [Releases](https://github.com/BackEddy/server/releases/latest)), boot the PC from it and follow the graphical installer. UEFI PCs (about 2012 onward); cable or Wi-Fi.
+- **A Windows PC that's always on (nothing gets erased):** download and run **[Instalar-Backeddy.exe](https://github.com/BackEddy/server/releases/latest/download/Instalar-Backeddy.exe)**. It creates a small virtual machine (Hyper-V, or VirtualBox on Windows Home) that boots the same installer.
+- **A fresh Debian 12/13:** the install script below.
+
+> ⚠️ **"Windows protected your PC":** `Instalar-Backeddy.exe` isn't digitally signed yet (we're working on it), so Windows SmartScreen warns about it. Click **More info › Run anyway**. It's built by GitHub Actions straight from the open-source code in [`windows/`](windows/). · *PT: o instalador ainda não tem assinatura digital; clique em **Mais informações › Executar assim mesmo**. · ES: el instalador aún no tiene firma digital; haz clic en **Más información › Ejecutar de todas formas**.*
 
 ## What it sets up
 
@@ -15,12 +23,12 @@
 - The installer checks **disk health (SMART)** and leaves failing disks out.
 - **Alerts**: when something is wrong (dead mirror disk, failing disk, backups stopped, disk full, a Mac without backups for 7 days) the server **beeps every minute** until someone acknowledges it — in the web panel (`http://name.local`), a key on the server's keyboard, or `backeddy ack`; quiet hours at night.
 - **Space is shared automatically**: PCs use what they need; Time Machine gets the rest (minus headroom), recalculated hourly.
-- **Already have a Windows server/NAS?** `windows/Instalar Backeddy.cmd` creates a ready Backeddy VM (Hyper-V, or VirtualBox on Windows Home) — nothing gets formatted — and a tray watcher that beeps on the Windows side.
+- **Already have a Windows server/NAS?** `Instalar-Backeddy.exe` creates a ready Backeddy VM (Hyper-V, or VirtualBox on Windows Home) — nothing gets formatted — and a tray watcher that beeps on the Windows side.
 - **Wi-Fi when there's no cable** (USB stick): the installer lists the networks and asks for the password; cable always wins when plugged in. Change networks later on the server itself with `sudo backeddy wifi`.
 - **Old laptop as a server**: lid closed is fine, the battery works as a UPS, the server beeps when the power goes out and shuts down safely at 10%.
 - **Never sleeps**, **automatic security updates**, **SMART disk monitoring**.
 - The server's own screen shows its health and how to connect (Mac, Windows, SSH), always up to date.
-- `backeddy status` / `add-pc` / `passwd` / `replace-disk` / `add-disk` helper.
+- `backeddy status` / `wifi` / `add-pc` / `passwd` / `replace-disk` / `add-disk` / `mirror` helper (status, alerts and wifi in the server's language; the other admin commands are still in Portuguese).
 
 ## Install (Debian 12 or 13, as root)
 
@@ -29,6 +37,7 @@ wget -qO- https://github.com/BackEddy/server/archive/refs/heads/main.tar.gz | ta
 cd server-main
 bash install.sh --name "Backup da Casa" --disk /dev/sdb                  # one disk (ERASED)
 bash install.sh --name "Backup da Casa" --disk /dev/sdb --disk /dev/sdc  # two disks, mirrored
+bash install.sh --lang en --name "Home Backup" --disk /dev/sdb           # server screen and alerts in English
 ```
 
 Test guides (Hyper-V, in Portuguese): [USB installer image](docs/TESTING-pendrive.pt-BR.md) · [install script](docs/TESTING.pt-BR.md) · [disks: mirror, failure, replacement](docs/TESTING-discos.pt-BR.md)
@@ -39,7 +48,7 @@ The USB image is built by GitHub Actions (`image/build.sh`, workflow *Imagem do 
 
 | | |
 | --- | --- |
-| 🍎 [Backeddy for Mac](https://github.com/BackEddy/mac) | Force, follow and verify Time Machine backups |
+| 🍎 [Backeddy for Mac](https://github.com/BackEddy/mac) | Follow and verify Time Machine backups, write the server USB drive, set up Time Machine on the server |
 | 🪟 Backeddy for Windows | Coming soon |
 | 🖥️ **Backeddy Server** | This repository |
 

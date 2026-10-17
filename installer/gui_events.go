@@ -199,7 +199,7 @@ func (g *GUI) drawCards(title string, lines []string, cards []Card, sel int, btn
 		text(g.img, ft, g.X(x+42), g.Y(y+26), c.Title, cText)
 		px := x + 42 + textWidth(ft, c.Title)/g.s + 10
 		if c.Recommended {
-			px += g.pill(px, y+11, "Recomendado", hex(0xE5F0FF), cAccent) + 6
+			px += g.pill(px, y+11, T("Recomendado"), hex(0xE5F0FF), cAccent) + 6
 		}
 		if !c.Plain && c.Title != riskLabel(c.Risk) {
 			rb, rf := riskColors(c.Risk)
@@ -212,7 +212,7 @@ func (g *GUI) drawCards(title string, lines []string, cards []Card, sel int, btn
 		y += ch + 9
 	}
 	g.buttons(btns, bsel)
-	g.hint("Clique, ou ↑↓ modo · ← → botão · Enter")
+	g.hint(T("Clique, ou ↑↓ modo · ← → botão · Enter"))
 }
 
 func (g *GUI) Cards(title string, lines []string, cards []Card, sel int, btns []string) (int, int) {
@@ -277,7 +277,7 @@ func (g *GUI) drawManual(title string, lines []string, disks []Disk, roles []Rol
 			label := d.Label() + d.EraseNote()
 			col := cText
 			if d.Health == HealthBad {
-				label = "FALHANDO · " + label
+				label = T("FALHANDO · ") + label
 				col = cDangerTxt
 			}
 			text(g.img, fl, g.X(x+12), g.Y(y+22), ellipsize(fl, label, g.L(w-pw-28)), col)
@@ -294,7 +294,7 @@ func (g *GUI) drawManual(title string, lines []string, disks []Disk, roles []Rol
 			textCentered(g.img, fr, g.X(x+w-pw/2-4), g.Y(y+22), "‹  "+roles[i].String()+"  ›", rfg)
 		} else {
 			g.addHit(x, y, w, rh-4, hitMirror)
-			text(g.img, face(true, g.L(13.5)), g.X(x+12), g.Y(y+22), "Espelhar os backups (cada arquivo em 2 discos)", cText)
+			text(g.img, face(true, g.L(13.5)), g.X(x+12), g.Y(y+22), T("Espelhar os backups (cada arquivo em 2 discos)"), cText)
 			// chave liga/desliga
 			sw, sh := 40.0, 22.0
 			sx, sy := x+w-sw-12, y+6
@@ -312,8 +312,8 @@ func (g *GUI) drawManual(title string, lines []string, disks []Disk, roles []Rol
 		y += rh
 	}
 	g.body(prev, y+6)
-	g.buttons([]string{"Continuar", "Voltar"}, 0)
-	g.hint("↑↓ disco · ← → muda · Enter · Esc volta")
+	g.buttons([]string{T("Continuar"), T("Voltar")}, 0)
+	g.hint(T("↑↓ disco · ← → muda · Enter · Esc volta"))
 }
 
 func (g *GUI) Manual(title string, lines []string, disks []Disk, roles []Role, mirror bool,

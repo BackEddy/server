@@ -119,10 +119,10 @@ func (g *GUI) drawChrome() {
 	fillPolys(c, [][]pt{{{g.X(sideW), g.Y(titleH)}, {g.X(sideW) + 1, g.Y(titleH)}, {g.X(sideW) + 1, y + h}, {g.X(sideW), y + h}}}, cSeparator)
 	// barra de título
 	fillPolys(c, [][]pt{{{x, g.Y(titleH)}, {x + w, g.Y(titleH)}, {x + w, g.Y(titleH) + 1}, {x, g.Y(titleH) + 1}}}, cSeparator)
-	textCentered(c, face(true, g.L(13)), x+w/2, g.Y(titleH/2+4.5), "Instalar o Backeddy Server", cText2)
+	textCentered(c, face(true, g.L(13)), x+w/2, g.Y(titleH/2+4.5), T("Instalar o Backeddy Server"), cText2)
 	// ícone e versão
 	g.drawLogo(c, g.X((sideW-76)/2), g.Y(titleH+34), g.L(76))
-	textCentered(c, face(false, g.L(12)), g.X(sideW/2), g.Y(winH-22), "Versão "+version, cText3)
+	textCentered(c, face(false, g.L(12)), g.X(sideW/2), g.Y(winH-22), T("Versão ")+version, cText3)
 	g.chrome = c
 }
 
@@ -194,6 +194,7 @@ func (g *GUI) begin() {
 	// etapas na lateral
 	y := titleH + 34 + 76 + 46
 	for i, s := range Stages {
+		s = T(s)
 		cy := y + float64(i)*34
 		dot, col, bold := hex(0xD1D1D6), cText3, false
 		switch {
@@ -345,9 +346,9 @@ func (g *GUI) drawChoose(title string, tone Tone, lines, btns []string, sel int)
 	g.body(lines, g.title(title, tone))
 	g.buttons(btns, sel)
 	if len(btns) > 1 {
-		g.hint("Clique, ou ← →  e  Enter")
+		g.hint(T("Clique, ou ← →  e  Enter"))
 	} else {
-		g.hint("Clique, ou Enter")
+		g.hint(T("Clique, ou Enter"))
 	}
 }
 
@@ -377,8 +378,8 @@ func (g *GUI) drawInput(title string, lines []string, label, val string, masked 
 	if errMsg != "" {
 		text(g.img, face(true, g.L(13)), g.X(x), g.Y(y+fh+24), errMsg, cDangerTxt)
 	}
-	g.buttons([]string{"Continuar"}, 0)
-	g.hint("Digite e aperte Enter      Backspace apaga")
+	g.buttons([]string{T("Continuar")}, 0)
+	g.hint(T("Digite e aperte Enter      Backspace apaga"))
 }
 
 func (g *GUI) drawProgress(title string, steps []string, current int, note string, tick int) {
@@ -389,7 +390,7 @@ func (g *GUI) drawProgress(title string, steps []string, current int, note strin
 	if current < len(steps) {
 		step = steps[current]
 	} else {
-		step = "Concluído"
+		step = T("Concluído")
 	}
 	// spinner de raios (como o do Mac) ao lado da etapa atual
 	if current < len(steps) {
@@ -407,7 +408,7 @@ func (g *GUI) drawProgress(title string, steps []string, current int, note strin
 	}
 	y += 30
 	if current < len(steps) {
-		text(g.img, face(false, g.L(13)), g.X(x), g.Y(y), "Etapa "+itoa(current+1)+" de "+itoa(len(steps)), cText2)
+		text(g.img, face(false, g.L(13)), g.X(x), g.Y(y), T("Etapa ")+itoa(current+1)+" de "+itoa(len(steps)), cText2)
 	}
 	if note != "" {
 		g.body([]string{note}, y+22)

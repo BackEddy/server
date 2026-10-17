@@ -1,4 +1,4 @@
-# Testando o Backeddy em VM no Windows (0.6.4)
+# Testando o Backeddy em VM no Windows (0.8)
 
 Para quem já tem um PC/servidor com Windows ligado o tempo todo. O instalador cria uma máquina
 virtual que dá partida pelo "pendrive virtual" (a mesma imagem do pendrive de verdade). A instalação
@@ -8,8 +8,9 @@ virtual que dá partida pelo "pendrive virtual" (a mesma imagem do pendrive de v
 
 Baixe o **Instalar-Backeddy.exe** da última release (github.com/BackEddy/server/releases) e dê dois
 cliques. Ele pede administrador, baixa sozinho o pendrive virtual e segue o roteiro abaixo.
-O Windows pode avisar "O Windows protegeu o computador" (o .exe ainda não é assinado):
-"Mais informações" › "Executar assim mesmo".
+O Windows vai avisar "O Windows protegeu o computador" (o .exe ainda não é assinado):
+"Mais informações" › "Executar assim mesmo". O instalador e o escudo da bandeja falam o idioma do Windows
+(português, espanhol; os outros, inglês).
 
 ## 1. Preparar (jeito de desenvolvimento, sem release)
 

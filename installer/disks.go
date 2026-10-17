@@ -64,7 +64,7 @@ func (d Disk) Kind() string {
 func (d Disk) Label() string {
 	m := strings.TrimSpace(d.Model)
 	if m == "" {
-		m = "Disco"
+		m = T("Disco")
 	}
 	return fmt.Sprintf("%s %s · %s (%s)", d.Kind(), HumanSize(d.Size), m, d.Path)
 }
@@ -76,13 +76,13 @@ func (d Disk) Short() string { return d.Kind() + " " + HumanSize(d.Size) }
 func (d Disk) EraseNote() string {
 	switch {
 	case d.Backeddy:
-		return " — tem backups do Backeddy"
+		return T(" — tem backups do Backeddy")
 	case d.Content == "Windows":
-		return " — tem Windows"
+		return T(" — tem Windows")
 	case d.Content == "Linux":
-		return " — tem Linux"
+		return T(" — tem Linux")
 	case d.Content == "dados":
-		return " — tem arquivos"
+		return T(" — tem arquivos")
 	}
 	return ""
 }
@@ -298,17 +298,17 @@ func (l *Layout) describe(sizes []int64) {
 	}
 	switch {
 	case len(l.Data) == 1 && !l.SystemWhole:
-		l.Summary = append(l.Summary, "Sistema e backups no mesmo disco: "+l.System.Label())
+		l.Summary = append(l.Summary, T("Sistema e backups no mesmo disco: ")+l.System.Label())
 	default:
 		if l.SystemWhole {
-			l.Summary = append(l.Summary, "Sistema: "+l.System.Label()+" (só o sistema)")
+			l.Summary = append(l.Summary, T("Sistema: ")+l.System.Label()+T(" (só o sistema)"))
 		} else {
-			l.Summary = append(l.Summary, "Sistema: 20 GB do "+l.System.Label())
+			l.Summary = append(l.Summary, T("Sistema: 20 GB do ")+l.System.Label())
 		}
 	}
 	switch {
 	case l.Mirror:
-		l.Summary = append(l.Summary, fmt.Sprintf("Backups: %s ESPELHADOS em %d discos. Se um disco morrer, nada se perde.",
+		l.Summary = append(l.Summary, fmt.Sprintf(T("Backups: %s ESPELHADOS em %d discos. Se um disco morrer, nada se perde."),
 			HumanSize(l.Usable), len(nDisks)))
 		min, max := sizes[0], sizes[0]
 		for _, s := range sizes {
@@ -324,30 +324,30 @@ func (l *Layout) describe(sizes []int64) {
 			total += s
 		}
 		if waste := total - 2*l.Usable; max > 0 && (max-min)*100/max >= 5 && waste > 10*GB {
-			l.Warns = append(l.Warns, fmt.Sprintf("Os discos têm tamanhos diferentes: %s ficam fora do espelho.", HumanSize(waste)))
+			l.Warns = append(l.Warns, fmt.Sprintf(T("Os discos têm tamanhos diferentes: %s ficam fora do espelho."), HumanSize(waste)))
 		}
 	case len(l.Data) == 1:
-		l.Summary = append(l.Summary, "Backups: "+HumanSize(l.Usable)+", sem cópia em outro disco.")
+		l.Summary = append(l.Summary, T("Backups: ")+HumanSize(l.Usable)+T(", sem cópia em outro disco."))
 	default:
-		l.Summary = append(l.Summary, fmt.Sprintf("Backups: %s SOMADOS em %d discos, sem proteção.", HumanSize(l.Usable), len(l.Data)))
+		l.Summary = append(l.Summary, fmt.Sprintf(T("Backups: %s SOMADOS em %d discos, sem proteção."), HumanSize(l.Usable), len(l.Data)))
 	}
 	for _, t := range l.Data {
 		if t.Disk.USB && t.Whole {
-			l.Warns = append(l.Warns, "Disco USB ("+t.Disk.Path+"): se o cabo soltar, os backups param. Deixe-o bem preso e na tomada.")
+			l.Warns = append(l.Warns, T("Disco USB (")+t.Disk.Path+T("): se o cabo soltar, os backups param. Deixe-o bem preso e na tomada."))
 		}
 	}
 	for _, d := range l.AllDisks() {
 		switch d.Health {
 		case HealthBad:
-			l.Reds = append(l.Reds, d.Short()+" ("+d.Path+") está falhando: "+d.HealthNote+". Pode morrer a qualquer momento.")
+			l.Reds = append(l.Reds, d.Short()+" ("+d.Path+T(") está falhando: ")+d.HealthNote+T(". Pode morrer a qualquer momento."))
 		case HealthOld:
 			l.Warns = append(l.Warns, d.Short()+" ("+d.Path+"): "+d.HealthNote+".")
 		}
 	}
 	if l.System.USB && l.System.Size < 128*GB {
-		l.Reds = append(l.Reds, "O sistema vai ficar num pendrive ou cartão: eles se desgastam e morrem rápido rodando um sistema.")
+		l.Reds = append(l.Reds, T("O sistema vai ficar num pendrive ou cartão: eles se desgastam e morrem rápido rodando um sistema."))
 	} else if l.System.USB && l.SystemWhole {
-		l.Warns = append(l.Warns, "O sistema vai ficar num disco USB: não desconecte este disco.")
+		l.Warns = append(l.Warns, T("O sistema vai ficar num disco USB: não desconecte este disco."))
 	}
 	if len(l.Reds) > 0 {
 		l.Risk = RiskRed
@@ -400,23 +400,23 @@ func Options(all []Disk) ([]*Layout, []string, error) {
 	}
 	var notes []string
 	for _, d := range bad {
-		notes = append(notes, "!"+d.Short()+" ("+d.Path+") está falhando ("+d.HealthNote+") e ficou de fora. Para usar mesmo assim: Escolher os discos à mão.")
+		notes = append(notes, "!"+d.Short()+" ("+d.Path+T(") está falhando (")+d.HealthNote+T(") e ficou de fora. Para usar mesmo assim: Escolher os discos à mão."))
 	}
 	if len(disks) == 0 {
 		if len(bad) > 0 {
-			return nil, notes, fmt.Errorf("os únicos discos encontrados estão falhando")
+			return nil, notes, fmt.Errorf(T("os únicos discos encontrados estão falhando"))
 		}
-		return nil, notes, fmt.Errorf("nenhum disco encontrado")
+		return nil, notes, fmt.Errorf(T("nenhum disco encontrado"))
 	}
 	sortDisks(disks)
 
 	if len(disks) == 1 {
 		d := disks[0]
 		if d.Size < minShared {
-			return nil, notes, fmt.Errorf("o disco %s tem só %s; o mínimo é %s", d.Path, HumanSize(d.Size), HumanSize(minShared))
+			return nil, notes, fmt.Errorf(T("o disco %s tem só %s; o mínimo é %s"), d.Path, HumanSize(d.Size), HumanSize(minShared))
 		}
 		l := build(ModeOneDisk, d, false, nil, false)
-		l.Title, l.Desc = "Um disco só", "Sistema e backups no mesmo disco. Um segundo disco pode entrar depois e virar espelho."
+		l.Title, l.Desc = T("Um disco só"), T("Sistema e backups no mesmo disco. Um segundo disco pode entrar depois e virar espelho.")
 		return []*Layout{l}, notes, nil
 	}
 
@@ -458,7 +458,7 @@ func Options(all []Disk) ([]*Layout, []string, error) {
 		}
 	} else {
 		if !canShare {
-			return nil, notes, fmt.Errorf("os discos são pequenos demais (%s); o mínimo é %s", HumanSize(small.Size), HumanSize(minShared))
+			return nil, notes, fmt.Errorf(T("os discos são pequenos demais (%s); o mínimo é %s"), HumanSize(small.Size), HumanSize(minShared))
 		}
 		protected = build(ModeProtected, small, false, others, true)
 		space = build(ModeSpace, small, false, others, false)
@@ -466,23 +466,23 @@ func Options(all []Disk) ([]*Layout, []string, error) {
 
 	var opts []*Layout
 	if protected != nil {
-		protected.Title, protected.Desc = "Protegido", "Cada arquivo fica em 2 discos. Se um disco morrer, nada se perde."
+		protected.Title, protected.Desc = T("Protegido"), T("Cada arquivo fica em 2 discos. Se um disco morrer, nada se perde.")
 		opts = append(opts, protected)
 	}
 	if len(space.Data) == 1 && InVM {
 		// numa VM o "disco" é um arquivo do Windows: a proteção é a dos discos do Windows
-		space.Title, space.Desc = "Disco de backup da máquina virtual", "A proteção contra disco quebrado fica por conta dos discos do Windows (RAID, Espaços de Armazenamento)."
+		space.Title, space.Desc = T("Disco de backup da máquina virtual"), T("A proteção contra disco quebrado fica por conta dos discos do Windows (RAID, Espaços de Armazenamento).")
 		space.Risk = RiskGreen
 	} else if len(space.Data) == 1 {
-		space.Title, space.Desc = "Um disco de backup", "Backups num disco só. Se ele morrer, você perde o histórico de backups."
+		space.Title, space.Desc = T("Um disco de backup"), T("Backups num disco só. Se ele morrer, você perde o histórico de backups.")
 	} else {
-		space.Title, space.Desc = "Mais espaço", "Soma os discos de backup. Se um morrer, você perde o histórico de backups."
+		space.Title, space.Desc = T("Mais espaço"), T("Soma os discos de backup. Se um morrer, você perde o histórico de backups.")
 	}
 	if protected == nil || space.Usable > protected.Usable+GB {
 		opts = append(opts, space)
 	}
 	if allIn != nil && allIn.Usable > space.Usable+GB && (protected == nil || allIn.Usable > protected.Usable+GB) {
-		allIn.Title, allIn.Desc = "Tudo junto", "Usa também a sobra do disco do sistema: cada byte para backup, sem proteção."
+		allIn.Title, allIn.Desc = T("Tudo junto"), T("Usa também a sobra do disco do sistema: cada byte para backup, sem proteção.")
 		opts = append(opts, allIn)
 	}
 	return opts, notes, nil
@@ -500,20 +500,20 @@ func ChooseLayout(all []Disk) (*Layout, error) {
 // Explain: por que o sistema foi para aquele disco (texto da tela de discos).
 func Explain(l *Layout) []string {
 	if l.Mode == ModeOneDisk {
-		return []string{"Encontrei um disco só: o sistema e os backups vão ficar nele."}
+		return []string{T("Encontrei um disco só: o sistema e os backups vão ficar nele.")}
 	}
 	if l.SystemWhole {
-		why := "o menor"
+		why := T("o menor")
 		if !l.System.Rotational && !l.System.USB {
-			why = "um SSD (rápido) e o menor"
+			why = T("um SSD (rápido) e o menor")
 		}
-		s := fmt.Sprintf("O sistema vai no %s (%s), que é %s, separado dos backups.", l.System.Short(), l.System.Path, why)
+		s := fmt.Sprintf(T("O sistema vai no %s (%s), que é %s, separado dos backups."), l.System.Short(), l.System.Path, why)
 		if l.Mirror {
-			s += " Se um disco de backup falhar, os backups continuam: é só trocar o disco, sem instalar de novo."
+			s += T(" Se um disco de backup falhar, os backups continuam: é só trocar o disco, sem instalar de novo.")
 		}
 		return []string{s}
 	}
-	return []string{"O sistema ocupa 20 GB do primeiro disco; o resto dele e os outros discos ficam para os backups."}
+	return []string{T("O sistema ocupa 20 GB do primeiro disco; o resto dele e os outros discos ficam para os backups.")}
 }
 
 // ---------- Manual ----------
@@ -530,13 +530,13 @@ const (
 func (r Role) String() string {
 	switch r {
 	case RoleBackup:
-		return "Backup"
+		return T("Backup")
 	case RoleSystem:
-		return "Sistema"
+		return T("Sistema")
 	case RoleBoth:
-		return "Sistema + backup"
+		return T("Sistema + backup")
 	}
-	return "Não usar"
+	return T("Não usar")
 }
 
 // AllowedRoles: papéis possíveis para um disco, pelo tamanho.
@@ -583,7 +583,7 @@ func ManualLayout(disks []Disk, roles []Role, mirror bool) (*Layout, error) {
 		switch roles[i] {
 		case RoleSystem, RoleBoth:
 			if sys != nil {
-				return nil, fmt.Errorf("escolha só um disco para o sistema")
+				return nil, fmt.Errorf(T("escolha só um disco para o sistema"))
 			}
 			dd := d
 			sys = &dd
@@ -593,14 +593,14 @@ func ManualLayout(disks []Disk, roles []Role, mirror bool) (*Layout, error) {
 		}
 	}
 	if sys == nil {
-		return nil, fmt.Errorf("escolha um disco para o sistema")
+		return nil, fmt.Errorf(T("escolha um disco para o sistema"))
 	}
 	if whole && len(others) == 0 {
-		return nil, fmt.Errorf("escolha pelo menos um disco para os backups")
+		return nil, fmt.Errorf(T("escolha pelo menos um disco para os backups"))
 	}
 	sortDisks(others)
 	l := build(ModeManual, *sys, whole, others, mirror)
-	l.Title = "Escolhido à mão"
+	l.Title = T("Escolhido à mão")
 	return l, nil
 }
 
@@ -613,8 +613,8 @@ func RecoverLayout(all []Disk) (*Layout, error) {
 	for _, d := range disks {
 		if d.Backeddy && d.RootPart != "" && d.EFIPart != "" {
 			return &Layout{Mode: ModeRecover, Risk: RiskGreen, System: d, ReuseSystem: true,
-				Summary: []string{"Sistema: refeito no " + d.Label() + ", na parte do sistema antigo.",
-					"Backups: mantidos, sem tocar em nada."}}, nil
+				Summary: []string{T("Sistema: refeito no ") + d.Label() + T(", na parte do sistema antigo."),
+					T("Backups: mantidos, sem tocar em nada.")}}, nil
 		}
 	}
 	// 2) um disco sem backups para receber o sistema (ex.: SSD novo no lugar do que morreu)
@@ -625,7 +625,7 @@ func RecoverLayout(all []Disk) (*Layout, error) {
 		}
 	}
 	if len(free) == 0 {
-		return nil, fmt.Errorf("para recuperar, coloque um disco para o sistema (16 GB ou mais) além dos discos de backup")
+		return nil, fmt.Errorf(T("para recuperar, coloque um disco para o sistema (16 GB ou mais) além dos discos de backup"))
 	}
 	sortDisks(free)
 	// prefere SSD interno
@@ -637,10 +637,10 @@ func RecoverLayout(all []Disk) (*Layout, error) {
 		}
 	}
 	l := &Layout{Mode: ModeRecover, Risk: RiskGreen, System: pick, SystemWhole: true,
-		Summary: []string{"Sistema: " + pick.Label() + " (será apagado).", "Backups: mantidos, sem tocar em nada."}}
+		Summary: []string{T("Sistema: ") + pick.Label() + T(" (será apagado)."), T("Backups: mantidos, sem tocar em nada.")}}
 	if pick.USB && pick.Size < 128*GB {
 		l.Risk = RiskRed
-		l.Reds = append(l.Reds, "O sistema vai ficar num pendrive ou cartão: eles se desgastam e morrem rápido rodando um sistema.")
+		l.Reds = append(l.Reds, T("O sistema vai ficar num pendrive ou cartão: eles se desgastam e morrem rápido rodando um sistema."))
 	}
 	return l, nil
 }

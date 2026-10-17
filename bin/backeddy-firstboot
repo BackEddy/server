@@ -30,12 +30,14 @@ if ! ls /etc/ssh/ssh_host_*_key >/dev/null 2>&1; then
   systemctl restart ssh >/dev/null 2>&1 || true
 fi
 
+# textos da tela no idioma escolhido no instalador (o env é lido logo abaixo)
+tr3() { case "${UI_LANG:-pt}" in en) printf '%s' "$2" ;; es) printf '%s' "$3" ;; *) printf '%s' "$1" ;; esac; }
 screen() { # $1 = linha de situação
   { printf '\033[2J\033[H\033[?25l\n'
     printf '  \033[1;36mBackeddy Server\033[0m\n'
     printf '  \033[36m──────────────────────────────────────────────────────────\033[0m\n\n'
     printf '  %s\n\n' "$1"
-    printf '  \033[2mNão desligue o computador. Isso acontece só uma vez.\033[0m\n'
+    printf '  \033[2m%s\033[0m\n' "$(tr3 'Não desligue o computador. Isso acontece só uma vez.' 'Don'"'"'t turn off the computer. This only happens once.' 'No apagues el ordenador. Esto pasa solo una vez.')"
   } > "$TTY" 2>/dev/null || true
 }
 
@@ -47,12 +49,13 @@ else
   ARGS=(--yes --name "$NAME" --tm-percent "${TM_PERCENT:-60}")
 fi
 [ "${NO_MIRROR:-0}" = 1 ] && ARGS+=(--no-mirror)
+[ -n "${UI_LANG:-}" ] && ARGS+=(--lang "$UI_LANG")
 # alarme escolhido no instalador (silêncio à noite; o install.sh mantém este arquivo)
 if [ -n "${QUIET_START+x}" ]; then
   mkdir -p /etc/backeddy
   printf 'QUIET_START=%s\nQUIET_END=%s\nBEEP_OK=%s\n' "$QUIET_START" "${QUIET_END:-}" "${BEEP_OK:-1}" > /etc/backeddy/alerts.conf
 fi
-screen "Procurando os discos de backup…"
+screen "$(tr3 'Procurando os discos de backup…' 'Looking for the backup disks…' 'Buscando los discos de backup…')"
 if [ "${DISKS:-}" = auto ]; then
   # máquina virtual: o disco de backup é o disco vazio (sem partições) que não é o do sistema
   ROOTDISK=$(lsblk -no PKNAME "$(findmnt -no SOURCE /)" | head -1)
@@ -87,7 +90,7 @@ SPIN='|/-\'
 i=0
 while kill -0 "$PID" 2>/dev/null; do
   EL=$(( $(date +%s) - START ))
-  screen "${SPIN:i++%4:1}  Preparando os discos de backup e os serviços…   $((EL / 60)) min $((EL % 60)) s"
+  screen "${SPIN:i++%4:1}  $(tr3 'Preparando os discos de backup e os serviços…' 'Preparing the backup disks and services…' 'Preparando los discos de backup y los servicios…')   $((EL / 60)) min $((EL % 60)) s"
   sleep 1
 done
 wait "$PID"

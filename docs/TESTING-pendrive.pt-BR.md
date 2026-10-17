@@ -1,4 +1,4 @@
-# Testando a imagem do pendrive (0.7)
+# Testando a imagem do pendrive (0.8)
 
 A imagem é montada no GitHub Actions e testada no Hyper-V, sem pendrive: o arquivo `.vhdx`
 faz o papel do pendrive. Nesta versão: **só UEFI** (PCs de ~2012 para cá). Wi-Fi só se não houver cabo (seção 8, em notebook de verdade).
@@ -46,6 +46,9 @@ Sem memória livre para 1 GB: use `-MemoryStartupBytes 512MB`.
 ## 3. O que conferir no instalador (gráfico)
 
 - [ ] Abre sozinho a janela clara (sem precisar de comandos), com as etapas na lateral
+- [ ] **Primeira tela: Idioma** (Português / English / Español). Faça uma instalação em inglês ou espanhol
+      pelo menos uma vez: todas as telas, a palavra de confirmação (ERASE / BORRAR), a tela do servidor,
+      o `sudo backeddy status` e os alertas saem no idioma escolhido; o painel segue o idioma do navegador
 - [ ] **Mouse**: o cursor aparece ao mexer; botões e cartões reagem ao passar e ao clicar
 - [ ] Teclado continua funcionando: ↑↓ escolhe o modo, ← → o botão, Enter confirma
 - [ ] "Como usar os discos": cartões **Protegido** (recomendado, 60 GB) e **Mais espaço** (120 GB)

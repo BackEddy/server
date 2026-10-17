@@ -1,6 +1,8 @@
 package main
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 )
 
@@ -105,4 +107,31 @@ func TestFlowNoWifiCard(t *testing.T) {
 		{title: "Teste do alarme", choose: 0}, {title: "Silêncio", card: 0},
 		{title: "Pronto"},
 	})
+}
+
+// Instalação inteira em inglês: títulos e palavra de confirmação traduzidos.
+func TestFlowEnglish(t *testing.T) {
+	defer func() { lang = LangPT }()
+	p := filepath.Join(t.TempDir(), "lsblk.json")
+	if err := os.WriteFile(p, []byte(hyperV), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	f := &fakeUI{t: t, script: []answer{{title: "Idioma", card: 1},
+		{title: "Turn this computer"},
+		{title: "How to use the disks", card: 0, btn: 0},
+		{title: "Warning"}, {title: "Confirm", input: "APAGAR"}, {title: "Confirm", input: "ERASE"},
+		{title: "Server name"},
+		{title: "Server password", input: "secret12"}, {title: "Server password", input: "secret12"},
+		{title: "Alarm test", choose: 0}, {title: "Quiet at night", card: 0},
+		{title: "Done!"},
+	}}
+	if err := run(f, true, p, filepath.Join(t.TempDir(), "sem-plano.json")); err != nil {
+		t.Fatalf("roteiro terminou com %v (vistas: %v)", err, f.seen)
+	}
+	if len(f.script) != 0 {
+		t.Fatalf("sobraram respostas: %v", f.script)
+	}
+	if lang != LangEN {
+		t.Fatalf("idioma não ficou em inglês")
+	}
 }

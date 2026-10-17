@@ -40,7 +40,7 @@ func judgeSmart(data []byte) (Health, string) {
 		return HealthUnknown, ""
 	}
 	if !s.SmartStatus.Passed {
-		return HealthBad, "o próprio disco diz que vai falhar"
+		return HealthBad, T("o próprio disco diz que vai falhar")
 	}
 	var realloc, pending int64
 	for _, a := range s.ATA.Table {
@@ -52,21 +52,21 @@ func judgeSmart(data []byte) (Health, string) {
 		}
 	}
 	if pending > 0 {
-		return HealthBad, fmt.Sprintf("%d setores ilegíveis", pending)
+		return HealthBad, fmt.Sprintf(T("%d setores ilegíveis"), pending)
 	}
 	if s.NVMe != nil {
 		if s.NVMe.CriticalWarning != 0 || s.NVMe.MediaErrors > 0 {
-			return HealthBad, "o SSD registrou erros graves"
+			return HealthBad, T("o SSD registrou erros graves")
 		}
 		if s.NVMe.PercentageUsed >= 100 {
-			return HealthOld, "SSD no fim da vida útil"
+			return HealthOld, T("SSD no fim da vida útil")
 		}
 	}
 	if realloc > 0 {
-		return HealthOld, fmt.Sprintf("já trocou %d setores com defeito; prefira o modo Protegido", realloc)
+		return HealthOld, fmt.Sprintf(T("já trocou %d setores com defeito; prefira o modo Protegido"), realloc)
 	}
 	if h := s.PowerOnTime.Hours; h >= 50000 {
-		return HealthOld, fmt.Sprintf("%d mil horas ligado (uns %d anos); prefira o modo Protegido", h/1000, h/8760)
+		return HealthOld, fmt.Sprintf(T("%d mil horas ligado (uns %d anos); prefira o modo Protegido"), h/1000, h/8760)
 	}
 	return HealthOK, ""
 }

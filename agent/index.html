@@ -43,40 +43,70 @@ select { padding: 7px 10px; border-radius: 8px; border: 1px solid var(--line); b
       <rect x="10.5" y="34" width="27" height="8" rx="2.6" fill="#fff" opacity=".92"/><circle cx="33.5" cy="38" r="1.4" fill="#2bd46b"/>
       <path d="M24 7v10" stroke="#fff" stroke-width="3.6" stroke-linecap="round"/><path d="M18.2 15.4h11.6L24 21.6z" fill="#fff"/>
     </svg>
-    <div><h1 id="name">Backeddy Server</h1><div class="sub" id="sub">Situação do servidor de backup</div></div>
+    <div><h1 id="name">Backeddy Server</h1><div class="sub" id="sub" data-t="sub">Situação do servidor de backup</div></div>
   </header>
 
   <section id="login" class="card hidden">
-    <h2>Entrar</h2>
-    <div class="sub">Use a senha do servidor (a mesma dos Macs e PCs).</div>
-    <form id="loginForm"><input type="password" id="pw" autocomplete="current-password" placeholder="Senha" autofocus>
-      <button type="submit">Entrar</button> <span class="err" id="loginErr"></span></form>
+    <h2 data-t="login">Entrar</h2>
+    <div class="sub" data-t="loginHint">Use a senha do servidor (a mesma dos Macs e PCs).</div>
+    <form id="loginForm"><input type="password" id="pw" autocomplete="current-password" placeholder="Senha" data-tp="password" autofocus>
+      <button type="submit" data-t="login">Entrar</button> <span class="err" id="loginErr"></span></form>
   </section>
 
   <section id="app" class="hidden">
     <div class="card">
-      <h2>Alertas</h2>
+      <h2 data-t="alerts">Alertas</h2>
       <div id="alerts"></div>
       <div id="ackRow" class="row hidden" style="margin-top:6px">
-        <span class="sub">Parar o bipe e lembrar de novo se continuar:</span>
-        <button data-days="1">Amanhã</button>
-        <button class="secondary" data-days="3">Em 3 dias</button>
-        <button class="secondary" data-days="7">Em 7 dias</button>
+        <span class="sub" data-t="ackHint">Parar o bipe e lembrar de novo se continuar:</span>
+        <button data-days="1" data-t="ack1">Amanhã</button>
+        <button class="secondary" data-days="3" data-t="ack3">Em 3 dias</button>
+        <button class="secondary" data-days="7" data-t="ack7">Em 7 dias</button>
       </div>
     </div>
     <div class="card">
-      <h2>Silêncio à noite</h2>
+      <h2 data-t="quiet">Silêncio à noite</h2>
       <div class="row">
-        <label><input type="checkbox" id="qon"> Sem bipe das</label>
-        <select id="qs"></select> às <select id="qe"></select>
-        <button class="secondary" id="qsave">Salvar</button> <span class="sub" id="qmsg"></span>
+        <label><input type="checkbox" id="qon"> <span data-t="quietFrom">Sem bipe das</span></label>
+        <select id="qs"></select> <span data-t="quietTo">às</span> <select id="qe"></select>
+        <button class="secondary" id="qsave" data-t="save">Salvar</button> <span class="sub" id="qmsg"></span>
       </div>
     </div>
-    <div class="card"><h2>Situação</h2><pre id="status">Carregando…</pre></div>
+    <div class="card"><h2 data-t="status">Situação</h2><pre id="status" data-t="loading">Carregando…</pre></div>
   </section>
 </main>
 <script>
 const $ = (id) => document.getElementById(id);
+// idioma do navegador: português, espanhol; os outros, inglês
+const L = (navigator.language || "en").slice(0, 2);
+const LANG = L === "pt" ? 0 : L === "es" ? 2 : 1;
+const TX = {
+  sub: ["Situação do servidor de backup", "Backup server status", "Estado del servidor de backup"],
+  beeping: ["O servidor está bipando", "The server is beeping", "El servidor está pitando"],
+  login: ["Entrar", "Sign in", "Entrar"],
+  loginHint: ["Use a senha do servidor (a mesma dos Macs e PCs).", "Use the server password (the same one the Macs and PCs use).", "Usa la contraseña del servidor (la misma de los Mac y PC)."],
+  password: ["Senha", "Password", "Contraseña"],
+  alerts: ["Alertas", "Alerts", "Alertas"],
+  ackHint: ["Parar o bipe e lembrar de novo se continuar:", "Stop the beeping and remind me again if it persists:", "Detener el pitido y avisar de nuevo si sigue:"],
+  ack1: ["Amanhã", "Tomorrow", "Mañana"],
+  ack3: ["Em 3 dias", "In 3 days", "En 3 días"],
+  ack7: ["Em 7 dias", "In 7 days", "En 7 días"],
+  quiet: ["Silêncio à noite", "Quiet at night", "Silencio de noche"],
+  quietFrom: ["Sem bipe das", "No beeping from", "Sin pitidos de"],
+  quietTo: ["às", "to", "a"],
+  save: ["Salvar", "Save", "Guardar"],
+  status: ["Situação", "Status", "Estado"],
+  loading: ["Carregando…", "Loading…", "Cargando…"],
+  allGood: ["Tudo certo: nenhum alerta pendente.", "All good: no pending alerts.", "Todo bien: ninguna alerta pendiente."],
+  tooMany: ["Muitas tentativas. Espere 10 minutos.", "Too many attempts. Wait 10 minutes.", "Demasiados intentos. Espera 10 minutos."],
+  wrong: ["Senha errada.", "Wrong password.", "Contraseña incorrecta."],
+  saved: ["Salvo.", "Saved.", "Guardado."],
+  notSaved: ["Não deu para salvar.", "Couldn't save.", "No se pudo guardar."],
+};
+const t = (k) => TX[k][LANG];
+document.documentElement.lang = ["pt-BR", "en", "es"][LANG];
+document.querySelectorAll("[data-t]").forEach((e) => e.textContent = t(e.dataset.t));
+document.querySelectorAll("[data-tp]").forEach((e) => e.placeholder = t(e.dataset.tp));
 for (const id of ["qs", "qe"]) for (let h = 0; h < 24; h++) $(id).add(new Option(h + "h", h));
 
 async function load() {
@@ -89,11 +119,11 @@ async function load() {
   if (s.alerts && s.alerts.length) {
     for (const a of s.alerts) { const d = document.createElement("div"); d.className = "alert"; d.textContent = a.Text; box.append(d); }
     $("ackRow").classList.remove("hidden");
-    $("sub").textContent = "O servidor está bipando";
+    $("sub").textContent = t("beeping");
   } else {
-    const d = document.createElement("div"); d.className = "okbox"; d.textContent = "Tudo certo: nenhum alerta pendente."; box.append(d);
+    const d = document.createElement("div"); d.className = "okbox"; d.textContent = t("allGood"); box.append(d);
     $("ackRow").classList.add("hidden");
-    $("sub").textContent = "Situação do servidor de backup";
+    $("sub").textContent = t("sub");
   }
   const on = s.quietStart >= 0 && s.quietEnd >= 0;
   $("qon").checked = on;
@@ -105,7 +135,7 @@ $("loginForm").onsubmit = async (e) => {
   e.preventDefault();
   const r = await fetch("/api/login", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ password: $("pw").value }) });
   if (r.ok) { $("pw").value = ""; $("loginErr").textContent = ""; load(); }
-  else $("loginErr").textContent = r.status === 429 ? "Muitas tentativas. Espere 10 minutos." : "Senha errada.";
+  else $("loginErr").textContent = r.status === 429 ? t("tooMany") : t("wrong");
 };
 
 document.querySelectorAll("[data-days]").forEach((b) => b.onclick = async () => {
@@ -116,7 +146,7 @@ document.querySelectorAll("[data-days]").forEach((b) => b.onclick = async () => 
 $("qsave").onclick = async () => {
   const body = $("qon").checked ? { start: +$("qs").value, end: +$("qe").value } : { off: true };
   const r = await fetch("/api/quiet", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
-  $("qmsg").textContent = r.ok ? "Salvo." : "Não deu para salvar.";
+  $("qmsg").textContent = r.ok ? t("saved") : t("notSaved");
   setTimeout(() => $("qmsg").textContent = "", 3000);
 };
 

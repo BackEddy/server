@@ -93,7 +93,7 @@ func runFlow(t *testing.T, lsblk string, script []answer) *fakeUI {
 	if err := os.WriteFile(p, []byte(lsblk), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	f := &fakeUI{t: t, script: script}
+	f := &fakeUI{t: t, script: append([]answer{{title: "Idioma"}}, script...)}
 	if err := run(f, true, p, filepath.Join(t.TempDir(), "sem-plano.json")); err != nil {
 		t.Fatalf("roteiro terminou com %v (vistas: %v)", err, f.seen)
 	}

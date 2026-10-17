@@ -146,19 +146,19 @@ func connectWifi(iface, ssid, pass string) error {
 		}
 		time.Sleep(time.Second)
 	}
-	return errors.New("conectou no Wi-Fi, mas o roteador não deu endereço")
+	return errors.New(T("conectou no Wi-Fi, mas o roteador não deu endereço"))
 }
 
 func bars(p int) string {
 	switch {
 	case p >= 70:
-		return "Sinal forte"
+		return T("Sinal forte")
 	case p >= 45:
-		return "Sinal bom"
+		return T("Sinal bom")
 	case p >= 25:
-		return "Sinal fraco"
+		return T("Sinal fraco")
 	}
-	return "Sinal muito fraco"
+	return T("Sinal muito fraco")
 }
 
 // askNetwork: sem cabo, oferece o Wi-Fi (se houver placa); devolve o nome da rede Wi-Fi usada ("" = cabo ou sem rede).
@@ -166,12 +166,12 @@ func askNetwork(ui Frontend, dry bool) string {
 	for !netReady(dry) {
 		iface := wifiIface()
 		if iface == "" {
-			if ui.Choose("Sem conexão de rede", ToneWarn, []string{
-				"Conecte este computador ao roteador com um cabo de rede.",
+			if ui.Choose(T("Sem conexão de rede"), ToneWarn, []string{
+				T("Conecte este computador ao roteador com um cabo de rede."),
 				"",
-				"Não achei placa de Wi-Fi que funcione neste computador.",
-				"O servidor precisa estar na mesma rede dos Macs e PCs.",
-			}, []string{"Tentar de novo", "Continuar sem rede"}, 0, nil) == 1 {
+				T("Não achei placa de Wi-Fi que funcione neste computador."),
+				T("O servidor precisa estar na mesma rede dos Macs e PCs."),
+			}, []string{T("Tentar de novo"), T("Continuar sem rede")}, 0, nil) == 1 {
 				return ""
 			}
 			continue
@@ -191,7 +191,7 @@ func askNetwork(ui Frontend, dry bool) string {
 // ("-", false) para seguir sem rede.
 func askWifi(ui Frontend, iface string) (string, bool) {
 	for {
-		ui.Notice("Procurando redes Wi-Fi", ToneNormal, []string{"Sem cabo de rede: procurando as redes Wi-Fi por perto…"})
+		ui.Notice(T("Procurando redes Wi-Fi"), ToneNormal, []string{T("Sem cabo de rede: procurando as redes Wi-Fi por perto…")})
 		nets, err := wifiScan(iface)
 		if netReady(false) { // ligaram o cabo enquanto isso
 			return "", false
@@ -200,14 +200,14 @@ func askWifi(ui Frontend, iface string) (string, bool) {
 			nets = nets[:4]
 		}
 		lines := []string{
-			"Não encontrei cabo de rede. Escolha a sua rede Wi-Fi.",
-			"Cabo é melhor: o primeiro backup pelo Wi-Fi é bem mais lento. Se ligar o cabo depois, o servidor passa a usá-lo sozinho.",
+			T("Não encontrei cabo de rede. Escolha a sua rede Wi-Fi."),
+			T("Cabo é melhor: o primeiro backup pelo Wi-Fi é bem mais lento. Se ligar o cabo depois, o servidor passa a usá-lo sozinho."),
 		}
 		if err != nil || len(nets) == 0 {
-			c := ui.Choose("Nenhuma rede Wi-Fi encontrada", ToneWarn, []string{
-				"Não encontrei redes Wi-Fi. Confira se o roteador está ligado e perto,",
-				"ou conecte um cabo de rede.",
-			}, []string{"Procurar de novo", "Digitar o nome da rede", "Já liguei o cabo", "Continuar sem rede"}, 0, nil)
+			c := ui.Choose(T("Nenhuma rede Wi-Fi encontrada"), ToneWarn, []string{
+				T("Não encontrei redes Wi-Fi. Confira se o roteador está ligado e perto,"),
+				T("ou conecte um cabo de rede."),
+			}, []string{T("Procurar de novo"), T("Digitar o nome da rede"), T("Já liguei o cabo"), T("Continuar sem rede")}, 0, nil)
 			switch c {
 			case 1:
 				if ssid, ok := tryConnect(ui, iface, "", true); ok {
@@ -222,13 +222,13 @@ func askWifi(ui Frontend, iface string) (string, bool) {
 		}
 		cards := make([]Card, len(nets))
 		for i, n := range nets {
-			lock := "Aberta (sem senha)"
+			lock := T("Aberta (sem senha)")
 			if n.Secured {
-				lock = "Com senha"
+				lock = T("Com senha")
 			}
 			cards[i] = Card{Title: n.SSID, Value: fmt.Sprintf("%d%%", n.Signal), Desc: bars(n.Signal) + " · " + lock, Plain: true}
 		}
-		card, btn := ui.Cards("Rede Wi-Fi", lines, cards, 0, []string{"Conectar", "Outra rede", "Procurar de novo", "Já liguei o cabo"})
+		card, btn := ui.Cards(T("Rede Wi-Fi"), lines, cards, 0, []string{T("Conectar"), T("Outra rede"), T("Procurar de novo"), T("Já liguei o cabo")})
 		switch btn {
 		case 0:
 			n := nets[card]
@@ -248,41 +248,41 @@ func askWifi(ui Frontend, iface string) (string, bool) {
 // tryConnect pede a senha (e o nome, se ssid == "") e conecta. false = voltar para a lista.
 func tryConnect(ui Frontend, iface, ssid string, secured bool) (string, bool) {
 	if ssid == "" {
-		ssid = strings.TrimSpace(ui.Input("Outra rede", []string{"Digite o nome da rede Wi-Fi exatamente como aparece no celular (maiúsculas contam)."}, "Nome da rede:", "", false))
+		ssid = strings.TrimSpace(ui.Input(T("Outra rede"), []string{T("Digite o nome da rede Wi-Fi exatamente como aparece no celular (maiúsculas contam).")}, T("Nome da rede:"), "", false))
 		if ssid == "" {
 			return "", false
 		}
 	}
-	lines := []string{"Rede: *" + ssid}
+	lines := []string{T("Rede: *") + ssid}
 	for {
 		pass := ""
 		if secured {
-			pass = ui.Input("Senha do Wi-Fi", lines, "Senha:", "", true)
+			pass = ui.Input(T("Senha do Wi-Fi"), lines, T("Senha:"), "", true)
 			if pass == "" {
 				return "", false
 			}
 		}
-		ui.Notice("Conectando", ToneNormal, []string{"Conectando em " + ssid + "…"})
+		ui.Notice(T("Conectando"), ToneNormal, []string{T("Conectando em ") + ssid + "…"})
 		err := wifiConnect(iface, ssid, pass)
 		if err == nil {
-			ui.Choose("Conectado pelo Wi-Fi", ToneOK, []string{
-				"+Conectado em " + ssid + ".",
+			ui.Choose(T("Conectado pelo Wi-Fi"), ToneOK, []string{
+				T("+Conectado em ") + ssid + ".",
 				"",
-				"O servidor vai usar esta rede sempre, e reconecta sozinho se ela cair.",
-				"!O primeiro backup pelo Wi-Fi é bem mais lento que pelo cabo. Se puder, ligue um cabo depois: o servidor passa a usá-lo sozinho.",
+				T("O servidor vai usar esta rede sempre, e reconecta sozinho se ela cair."),
+				T("!O primeiro backup pelo Wi-Fi é bem mais lento que pelo cabo. Se puder, ligue um cabo depois: o servidor passa a usá-lo sozinho."),
 				"",
-				"Para trocar de rede no futuro: com teclado e monitor no servidor, entre como admin e rode sudo backeddy wifi.",
-			}, []string{"Continuar"}, 0, nil)
+				T("Para trocar de rede no futuro: com teclado e monitor no servidor, entre como admin e rode sudo backeddy wifi."),
+			}, []string{T("Continuar")}, 0, nil)
 			return ssid, true
 		}
 		if !secured {
-			ui.Choose("Não conectou", ToneWarn, []string{"Não consegui conectar em " + ssid + ".", "", err.Error()}, []string{"Voltar"}, 0, nil)
+			ui.Choose(T("Não conectou"), ToneWarn, []string{T("Não consegui conectar em ") + ssid + ".", "", err.Error()}, []string{T("Voltar")}, 0, nil)
 			return "", false
 		}
 		if errors.Is(err, errWifiAuth) {
-			lines = []string{"Rede: *" + ssid, "", "!Senha errada (ou o nome da rede não confere). Tente de novo."}
+			lines = []string{T("Rede: *") + ssid, "", T("!Senha errada (ou o nome da rede não confere). Tente de novo.")}
 		} else {
-			lines = []string{"Rede: *" + ssid, "", "!Não conectou: " + err.Error()}
+			lines = []string{T("Rede: *") + ssid, "", T("!Não conectou: ") + err.Error()}
 		}
 	}
 }

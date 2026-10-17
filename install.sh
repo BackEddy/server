@@ -17,11 +17,12 @@
 #   --recover          Reaproveita discos de backup do Backeddy já existentes (reinstalação):
 #                      não apaga nada e restaura nome, senhas do Kopia e certificado guardados neles
 #   --yes              Não pergunta nada (exige BACKEDDY_PASSWORD no ambiente)
+#   --lang pt|en|es    Idioma da tela do servidor, do status e dos alertas (padrão: pt)
 #
 # Pode ser rodado de novo com segurança: reaplica as configurações.
 set -euo pipefail
 
-VERSION="0.7.0"
+VERSION="0.8.0"
 NAME="Backup da Casa"
 DISKS=()
 MIRROR=1
@@ -30,6 +31,8 @@ ASSUME_YES=0
 RECOVER=0
 NAME_SET=0
 TM_SET=0
+UI_LANG=pt
+LANG_SET=0
 DATA=/srv/backeddy
 ETC=/etc/backeddy
 SRC="$(cd "$(dirname "$0")" && pwd)"
@@ -42,6 +45,7 @@ while [ $# -gt 0 ]; do
     --tm-percent) TM_PERCENT="$2"; TM_SET=1; shift 2 ;;
     --recover) RECOVER=1; shift ;;
     --yes) ASSUME_YES=1; shift ;;
+    --lang) UI_LANG="$2"; LANG_SET=1; shift 2 ;;
     -h|--help) sed -n '2,22p' "$0"; exit 0 ;;
     *) echo "Opção desconhecida: $1"; exit 1 ;;
   esac
@@ -187,6 +191,8 @@ if [ "$RECOVER" = 1 ]; then
   if [ -f "$CFG/server.conf" ]; then
     SAVED_NAME=$(. "$CFG/server.conf"; echo "${NAME:-}")
     SAVED_TM=$(. "$CFG/server.conf"; echo "${TM_PERCENT:-}")
+    SAVED_LANG=$(. "$CFG/server.conf"; echo "${UI_LANG:-}")
+    [ "$LANG_SET" = 1 ] || [ -z "$SAVED_LANG" ] || UI_LANG="$SAVED_LANG"
     [ "$NAME_SET" = 1 ] || [ -z "$SAVED_NAME" ] || NAME="$SAVED_NAME"
     [ "$TM_SET" = 1 ] || [ -z "$SAVED_TM" ] || TM_PERCENT="$SAVED_TM"
     install -d -m 0700 "$ETC/kopia"
@@ -239,7 +245,8 @@ SLUG=$(echo "$NAME" | iconv -f utf-8 -t ascii//TRANSLIT 2>/dev/null | tr '[:uppe
 hostnamectl set-hostname "$SLUG"
 grep -q "127.0.1.1" /etc/hosts && sed -i "s/^127.0.1.1.*/127.0.1.1\t$SLUG/" /etc/hosts || echo -e "127.0.1.1\t$SLUG" >> /etc/hosts
 install -d -m 0755 "$ETC"
-printf 'NAME="%s"\nSLUG="%s"\nVERSION="%s"\nTM_PERCENT="%s"\n' "$NAME" "$SLUG" "$VERSION" "$TM_PERCENT" > "$ETC/server.conf"
+case "$UI_LANG" in pt|en|es) ;; *) UI_LANG=pt ;; esac
+printf 'NAME="%s"\nSLUG="%s"\nVERSION="%s"\nTM_PERCENT="%s"\nUI_LANG="%s"\n' "$NAME" "$SLUG" "$VERSION" "$TM_PERCENT" "$UI_LANG" > "$ETC/server.conf"
 ok "Endereço na rede: $SLUG.local"
 
 # ---------- Usuário e pastas ----------

@@ -39,6 +39,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: out/*
+          body_path: .github/release-notes.md
 
   windows:
     # o instalador do Windows vira um .exe único (com o vigia embutido), montado numa máquina Windows do GitHub

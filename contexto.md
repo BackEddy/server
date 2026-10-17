@@ -255,6 +255,17 @@ HDs CMR (evitar SMR); notebook é ótimo (8–15 W, bateria = nobreak).
 - Testes: parseIwScan, roteiro com Wi-Fi (senha errada → certa) e sem placa. Os pacotes de firmware existem no
   trixie (o build da v0.7.0 passou).
 
+### 0.8.0 — três idiomas e preparo para a comunidade (17/10/2026)
+- Instalador do servidor (Go) em pt/en/es: primeira tela "Idioma · Language · Idioma"; installer/i18n.go (T() com chave em
+  português, trUI traduz tudo o que vai para a tela) + i18n_catalog.go (≈256 textos); palavras digitadas viram ERASE/BORRAR,
+  CONTINUE, EXIT. Teste TestFlowEnglish. `--shots DIR --lang en` para ver as telas.
+- Idioma vai para o servidor: env UI_LANG → install.sh --lang → server.conf UI_LANG. bin/backeddy (status, tela do monitor,
+  alertas, alerts/ack/quiet, wifi) e o primeiro boot traduzidos com m/mf; marcas do console [ WARN ]/[ FAIL ]/[ERROR ].
+  Comandos de administração (add-pc, passwd, replace-disk, add-disk, mirror, unmirror) ainda só em português.
+- Painel web segue o idioma do navegador. Instalador do Windows (.exe) e escudo da bandeja seguem o idioma do Windows.
+- .exe sem assinatura (SignPath pediu reputação/links): aviso explicado no README, nas notas da release
+  (.github/release-notes.md, body_path no workflow) e nos READMEs do Backeddy for Mac (2.3.1).
+
 ## Pendências gerais
 - Teste real de backup do Time Machine e de um PC no Kopia (ainda não feitos, por opção).
 - Alertas do servidor (lacuna conhecida).

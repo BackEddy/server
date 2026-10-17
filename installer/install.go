@@ -32,6 +32,7 @@ type Installer struct {
 	BeepOK               bool   // o PC tem alto-falante (teste do alarme)
 	QuietStart, QuietEnd int    // silêncio à noite (-1 = bipar a qualquer hora)
 	Wifi                 string // rede Wi-Fi escolhida no instalador ("" = cabo)
+	Lang                 string // idioma do servidor: pt, en ou es
 
 	log       *os.File
 	espPart   string
@@ -73,7 +74,7 @@ func (in *Installer) runIn(stdin string, name string, args ...string) error {
 		in.logf("%s", strings.TrimRight(string(out), "\n"))
 	}
 	if err != nil {
-		return fmt.Errorf("%s falhou: %v (veja %s)", name, err, logPath)
+		return fmt.Errorf(T("%s falhou: %v (veja %s)"), name, err, logPath)
 	}
 	return nil
 }
@@ -238,6 +239,9 @@ func (in *Installer) configure() error {
 		tm, strings.Join(disks, " "))
 	if in.Recover {
 		env += "RECOVER=1\n"
+	}
+	if in.Lang != "" {
+		env += "UI_LANG=" + in.Lang + "\n"
 	}
 	if in.QuietStart >= 0 && in.QuietEnd >= 0 && (in.QuietStart != 0 || in.QuietEnd != 0) {
 		env += fmt.Sprintf("QUIET_START=%d\nQUIET_END=%d\n", in.QuietStart, in.QuietEnd)
