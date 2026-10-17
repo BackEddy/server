@@ -38,15 +38,8 @@ Créditos: Eddy Antonini — eddyantonini.com.br.
   do Force TM na primeira abertura. Repo transferido `lordironballs/force-tm` → `BackEddy/mac` (redirects ok).
 - Fora da Mac App Store por causa do sandbox (decisão aceita).
 - Pendente: ícone e screenshot com a marca Backeddy (ainda são do Force TM).
-- **2.1.0** (17/10/2026, testada): **Criar pendrive do Backeddy Server** (Sources/Pendrive.swift: lista discos físicos
-  removíveis sem o do Mac e os do TM; baixa o .img.xz da última release + SHA256SUMS, cache em
-  ~/Library/Caches/br.com.backeddy.mac/pendrive; confirma digitando APAGAR; grava com `/usr/libexec/authopen
-  -stdoutpipe` (recebe o fd por SCM_RIGHTS) descompactando xz com Compression/LZMA em blocos alinhados; ejeta) e
-  **Configurar o Time Machine** (Sources/TMSetup.swift: Bonjour `_backeddy._tcp`, confere a senha em /api/login,
-  `tmutil setdestination [-a] smb://backeddy:SENHA@slug.local/TimeMachine && tmutil enable && tmutil startbackup`
-  via runAdmin; pergunta "usar os dois" se já houver destino). Info.plist ganhou NSLocalNetworkUsageDescription,
-  NSBonjourServices e NSAllowsLocalNetworking.
-- Futuro: aba **Servidor** (status do servidor, reconhecer alertas).
+- Futuro (2.1): aba **Servidor** (mede o Mac, recomenda disco, grava o pendrive do Backeddy Server,
+  detecta o servidor e configura o Time Machine com um clique).
 
 ## Backeddy for Windows (especificado)
 
@@ -152,63 +145,6 @@ via QR); x86 64 bits apenas (Debian 13 sem i386; Kopia sem binário 32 bits).
   Windows, SSH (IP via `\4` do agetty) e o `backeddy status` completo; getty@tty1 espera firstboot e issue.
   No console, `backeddy status` usa [  OK  ]/[AVISO ]/[ ERRO ] coloridos; por SSH continua com emojis.
 
-### 0.4.0 testada (17/10/2026) e 0.5.0 escrita
-- 0.4.0 aprovada no Hyper-V: instalador gráfico, reinício ao tirar o pendrive, tela do servidor com SSH.
-  Bug achado: /run é noexec no Debian 13 → instalador agora roda de um tmpfs próprio (/run/backeddy-bin)
-  e faz mlockall. A "interface web" do Windows não existe (Kopia com --no-ui): texto da tela corrigido.
-- 0.5.0 (spec "Discos e modos" no Claude Docs): mouse (evdev, relativo/absoluto/touchpad, cursor, hover);
-  cartões de modo Protegido / Mais espaço / Tudo junto / Um disco só, com espaço e risco (verde/amarelo/vermelho;
-  amarelo = tela de aviso, vermelho = digitar CONTINUAR); Manual (papel por disco + chave do espelho);
-  SMART no instalador (disco ruim fica de fora; no Manual vira vermelho); avisos "tem Windows/Linux/backups";
-  "Quem vai fazer backup aqui?" sem plano; Recuperar servidor (install.sh --recover; configuração guardada
-  em /srv/backeddy/.backeddy: server.conf, senhas e certificado do Kopia; reaproveita as partições do sistema
-  se o disco antigo existir); `backeddy mirror`/`unmirror` + recálculo do limite do Time Machine.
-  Testes: matriz de discos, Manual, recuperação, SMART, lsblk e roteiros completos do instalador (flow_test.go).
-
-### 0.6.0 (17/10/2026, escrita em passos curtos, falta build e teste)
-- Passo a passo combinado com o Eddy (tokens curtos): 1 APAGAR no campo; 2 divisão automática do espaço
-  (backeddy space + timer de hora em hora: TM = útil − Kopia − folga 10%/20 GB, piso 20%; sem a tela
-  "Quem vai fazer backup"); 3 vigia em Go (agent/: backeddy check a cada minuto, bipe pcspkr 3x/min,
-  qualquer tecla no servidor reconhece por 1 dia, backeddy ack/alerts/quiet, silêncio 22–8);
-  4 painel web na porta 80 (senha = hash NT do Samba via pdbedit; reconhecer 1/3/7 dias; silêncio;
-  Bonjour _backeddy._tcp); 5 teste do alarme + silêncio no instalador; 6 imagem pronta de VM no CI
-  (-vm.vhdx e -vm.vdi; disquinho FAT BACKEDDYCFG com firstboot.env; DISKS=auto; admin e chaves SSH no
-  1º boot; hyperv-daemons para o IP); 7 windows/Instalar-Backeddy.ps1 (checa BIOS, Hyper-V liga com 1
-  reinício ou cai no VirtualBox; uma janela: nome, senha, unidade, tamanho, silêncio; cria switch em
-  ponte se faltar; VM 512 MB, Gen2, Secure Boot, liga/desliga com o Windows); 8 caminho VirtualBox
-  (instala VC++ e VirtualBox em silêncio, ponte, SATA, tarefa agendada para ligar; limitação: Windows
-  desligando corta a VM); 9 vigia na bandeja do Windows (/api/beep sem senha, bipa e avisa).
-- Decisões: descartado "Faça tudo por mim"; teste de backup real e de hardware com um amigo que já tem
-  servidor Windows (usa o instalador de VM).
-
-### 0.6.1 — VM no Windows pelo "pendrive virtual" (17/10/2026)
-- Teste da 0.6.0 no Hyper-V: a VM com imagem pronta configurou o servidor (o Mac achou), mas o 1º boot
-  não terminou (causa não vista: o registro foi sobrescrito no reinício), o SSH ficou fora (sem chaves no
-  boot → start-limit) e o Windows não recebeu o IP (KVP). Ideia do Eddy, adotada: a VM dá partida pelo
-  pendrive virtual (mesmo instalador gráfico já testado) e uma janelinha no Windows tem "Ejetar pendrive"
-  (Hyper-V: Remove-VMHardDiskDrive com a VM ligada; VirtualBox: porta SATA hotpluggable + medium none).
-- Saiu a imagem pronta de VM e o disquinho de configuração; o CI gera o pendrive também em .vdi.
-- Instalador gráfico reconhece VM (DMI): cartão verde "Disco de backup da máquina virtual" e sem teste de
-  bipe (pergunta só o silêncio à noite). /api/hello (sem senha) devolve nome/slug para o Windows.
-- O Windows acha a VM pelo IP do Hyper-V ou pelo MAC na tabela ARP (com "ping" na rede /24).
-
-### 0.6.2 — correções do teste da 0.6.1 (17/10/2026)
-- Disco do sistema de 20 GB não cabia (EFI 512M + root 20G fixo): root agora ocupa o disco inteiro quando o
-  disco é só do sistema; o instalador do Windows cria 24 GB.
-- Primeiro boot travava com 0% de CPU (também na VM de imagem pronta): impasse do systemd — o install.sh
-  esperava "systemctl restart backeddy-agent", e o vigia tinha After=multi-user.target, que só chega depois
-  do primeiro boot. Vigia agora After=network.target e o install.sh liga serviços novos com --no-block.
-- Próxima rodada: silêncio à noite com horário digitado (instalador e painel); .exe único; releases.
-
-### 0.6.3 — .exe único e acabamentos (17/10/2026)
-- 0.6.2 aprovada no Hyper-V pelo instalador do Windows (VM pelo pendrive virtual, Ejetar, painel, vigia, Mac vê o TM).
-- Vigia iniciado com conhost --headless (no Windows 11 o -WindowStyle Hidden deixava um Terminal vazio).
-- Status na VM: "Disco da máquina virtual" em verde (systemd-detect-virt), sem o aviso de sem espelho.
-- Silêncio à noite: cartão "Escolher o horário" (digita início e fim, 0–23).
-- CI: job "windows" (windows-latest) embute o vigia no script e gera Instalar-Backeddy.exe com ps2exe
-  (-noConsole -requireAdmin); artefato backeddy-windows; em tag v*, release com .exe + pendrive (.vhdx/.vdi/.img.xz).
-  O .exe baixa sozinho o pendrive virtual da última release. Sem assinatura ainda (SmartScreen avisa).
-
 ### Plano de construção
 | Fase | Conteúdo | Situação |
 | --- | --- | --- |
@@ -222,27 +158,6 @@ via QR); x86 64 bits apenas (Debian 13 sem i386; Kopia sem binário 32 bits).
 
 Requisitos: x86 64 bits; 512 MB–1 GB (recomendado 2 GB); sistema 16 GB; rede Gigabit recomendada;
 HDs CMR (evitar SMR); notebook é ótimo (8–15 W, bateria = nobreak).
-
-### 0.6.4 — janela única no instalador do Windows (17/10/2026)
-- O .exe não some depois de escolher disco e tamanho: uma janela só mostra as etapas (download com MB/% via
-  WebClient.DownloadFileTaskAsync, cópia em pedaços), vira a de Ejetar pendrive e depois a de "Preparando o servidor".
-- Pasta da VM no disco escolhido: `X:\BackEddyVM` (antes `X:\Backeddy`). O download vira o pendrive.vhdx direto (Move).
-
-### 0.7.0 — Wi-Fi e notebook como servidor (17/10/2026, ainda não testada em hardware)
-- Imagem: iwd + iw + wireless-regdb e firmwares iwlwifi/atheros/brcm80211/mediatek (além de realtek/misc-nonfree),
-  no instalador e no servidor. networkd: 20-cabo (RouteMetric 100) e 25-wifi `wl*` (RouteMetric 600, o cabo ganha);
-  iwd com EnableNetworkConfiguration=false (DHCP é do networkd).
-- Instalador (installer/wifi.go): só sem cabo. Placa Wi-Fi → lista as 4 redes mais fortes (`iw dev X scan`,
-  sem escondidas/802.1X), "Outra rede" (digitar o nome), senha → `iwctl --passphrase … station X connect`,
-  espera DHCP 30 s; senha errada pede de novo; aviso "Wi-Fi é mais lento". Sem placa: pede o cabo.
-  O perfil (/var/lib/iwd) é copiado para o servidor e para a cópia de configuração nos discos (recuperação).
-- `backeddy wifi` (só no próprio servidor, decisão do Eddy): lista, escolhe, senha, conecta, atualiza a cópia e a tela.
-- Status/tela/painel: "Rede: cabo (enp…)" ou "Wi-Fi "X" · sinal N%" (aviso abaixo de 35%); "Sem rede" + como resolver.
-  Alerta `no-net`.
-- Modo notebook (só se houver /sys/class/power_supply/BAT*): bateria no status; sem energia na tomada → alerta
-  `power` (bipa) e desliga com segurança em 10%. Tampa fechada já não suspendia (logind, desde 0.3).
-- Testes: parseIwScan, roteiro com Wi-Fi (senha errada → certa) e sem placa. Risco: nomes de pacotes de firmware
-  no trixie não conferidos daqui (sem acesso ao Debian); se o build falhar, ajustar a lista em image/build.sh.
 
 ## Pendências gerais
 - Teste real de backup do Time Machine e de um PC no Kopia (ainda não feitos, por opção).
