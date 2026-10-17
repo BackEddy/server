@@ -37,7 +37,7 @@ KOPIA_SRC="deb [signed-by=$KOPIA_KEY] http://packages.kopia.io/apt/ stable main"
 
 log "Instalador (Go)"
 ( cd "$REPO/installer" && CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
-    go build -trimpath -ldflags "-s -w -X main.version=$VER" -o "$W/backeddy-installer" . )
+    go build -buildvcs=false -trimpath -ldflags "-s -w -X main.version=$VER" -o "$W/backeddy-installer" . )
 
 FIRMWARE="firmware-linux-free,firmware-misc-nonfree,firmware-realtek"
 
