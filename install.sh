@@ -19,7 +19,7 @@
 # Pode ser rodado de novo com segurança: reaplica as configurações.
 set -euo pipefail
 
-VERSION="0.2.1"
+VERSION="0.3.0"
 NAME="Backup da Casa"
 DISKS=()
 MIRROR=1
@@ -83,7 +83,7 @@ if [ "${#DISKS[@]}" -gt 0 ]; then
     [ -z "${SEEN[$d]:-}" ] || die "O disco $d foi informado duas vezes."
     SEEN[$d]=1
   done
-  apt-get install -y -qq btrfs-progs >/dev/null
+  command -v mkfs.btrfs >/dev/null || { apt-get update -qq; apt-get install -y -qq btrfs-progs >/dev/null; }
 
   if mountpoint -q "$DATA" && [ "$(findmnt -no FSTYPE "$DATA")" = btrfs ] \
      && [ "$(blkid -s LABEL -o value "$(findmnt -no SOURCE "$DATA" | sed 's/\[.*//')" 2>/dev/null)" = backeddy ]; then
@@ -156,9 +156,13 @@ fi
 # ---------- Pacotes ----------
 say "Instalando pacotes"
 export DEBIAN_FRONTEND=noninteractive
-apt-get update -qq
-apt-get install -y -qq samba avahi-daemon smartmontools unattended-upgrades btrfs-progs \
-  curl ca-certificates gnupg openssl >/dev/null
+PKGS="samba avahi-daemon smartmontools unattended-upgrades btrfs-progs curl ca-certificates gnupg openssl"
+# na imagem do pendrive tudo já vem instalado: funciona até sem internet
+# shellcheck disable=SC2086
+if ! dpkg -s $PKGS >/dev/null 2>&1; then
+  apt-get update -qq
+  apt-get install -y -qq $PKGS >/dev/null
+fi
 ok "Samba, Avahi, SMART e atualizações automáticas"
 
 if ! command -v kopia >/dev/null; then

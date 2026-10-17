@@ -1,0 +1,14 @@
+[Unit]
+Description=Backeddy: primeiro boot (prepara os discos de backup, Samba e Kopia)
+After=network-online.target local-fs.target systemd-udev-settle.service
+Wants=network-online.target
+ConditionPathExists=/etc/backeddy/firstboot.env
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/opt/backeddy-server/bin/backeddy-firstboot
+TimeoutStartSec=30min
+
+[Install]
+WantedBy=multi-user.target

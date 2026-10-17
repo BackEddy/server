@@ -4,7 +4,7 @@
 
 <p align="center"><b>Turn any old PC into a backup server for your Macs (Time Machine) and Windows PCs.</b></p>
 
-> **Status: early preview (0.2).** Today it's an install script for a fresh Debian. The goal is a USB stick you plug into an old PC: confirm, type a password, done — created by the Backeddy app.
+> **Status: early preview (0.3).** Two ways to install: the **USB installer image** (plug into an old PC, confirm, type a password, done — UEFI and wired network only for now) or the **install script** on a fresh Debian. Soon the Backeddy app will create the USB stick for you.
 
 ## What it sets up
 
@@ -23,7 +23,9 @@ bash install.sh --name "Backup da Casa" --disk /dev/sdb                  # one d
 bash install.sh --name "Backup da Casa" --disk /dev/sdb --disk /dev/sdc  # two disks, mirrored
 ```
 
-Test guides (Hyper-V, in Portuguese): [install](docs/TESTING.pt-BR.md) · [disks: mirror, failure, replacement](docs/TESTING-discos.pt-BR.md)
+Test guides (Hyper-V, in Portuguese): [USB installer image](docs/TESTING-pendrive.pt-BR.md) · [install script](docs/TESTING.pt-BR.md) · [disks: mirror, failure, replacement](docs/TESTING-discos.pt-BR.md)
+
+The USB image is built by GitHub Actions (`image/build.sh`, workflow *Imagem do pendrive*) from Debian 13 with mmdebstrap; the installer is a small Go program (`installer/`).
 
 ## Part of Backeddy
 

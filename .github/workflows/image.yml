@@ -1,0 +1,41 @@
+name: Imagem do pendrive
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    container:
+      image: debian:trixie
+      options: --privileged
+    steps:
+      - name: Ferramentas
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends mmdebstrap zstd dosfstools mtools gdisk e2fsprogs \
+            qemu-utils golang-go curl gnupg ca-certificates git debian-archive-keyring xz-utils
+
+      - uses: actions/checkout@v4
+
+      - name: Montar a imagem
+        run: bash image/build.sh
+
+      - name: Guardar como artefato
+        uses: actions/upload-artifact@v4
+        with:
+          name: backeddy-server-imagem
+          path: out/*
+          retention-days: 14
+          compression-level: 0
+
+      - name: Publicar na release (tags v*)
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: out/*

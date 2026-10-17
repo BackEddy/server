@@ -25,7 +25,7 @@ Créditos: Eddy Antonini — eddyantonini.com.br.
 | Produto | Repositório | Situação |
 | --- | --- | --- |
 | Backeddy for Mac (ex-Force TM) | BackEddy/mac | 2.0.0 publicada, notarizada |
-| Backeddy Server | BackEddy/server | 0.2.1 (script), discos testados |
+| Backeddy Server | BackEddy/server | 0.3.0: instalador do pendrive escrito, aguardando 1º build |
 | Backeddy for Windows | (BackEddy/windows, futuro) | Especificado, não iniciado |
 
 ## Backeddy for Mac (ex-Force TM)
@@ -100,14 +100,31 @@ via QR); x86 64 bits apenas (Debian 13 sem i386; Kopia sem binário 32 bits).
 - Estado atual da VM: espelho com disco-a (20 GB) + disco-c (30 GB); `backups.vhdx` (1 TB) desanexado, ainda
   no B:; checkpoints automáticos desligados. A VM antiga "TimeMachine" pode ter o mesmo problema de checkpoints
   (verificar `Get-VMCheckpoint TimeMachine`).
-- Próximo: publicar a 0.2.1; depois fase 2 (instalador em Go + imagem do pendrive) ou fase 3 (alertas).
+- Próximo: publicar a 0.3.0, rodar o workflow "Imagem do pendrive" e testar no Hyper-V (docs/TESTING-pendrive.pt-BR.md).
+
+### Fase 2 — instalador do pendrive (0.3.0, escrita em 16/10/2026 ~23h50)
+- Decisões: só cabo de rede; sem testes automáticos de boot (manual no Hyper-V); só UEFI (BIOS antiga depois).
+- `installer/` (Go, sem dependências; testes de receitas/plano/dry-run passam): telas grandes (setas/Enter),
+  receitas de discos (1 disco = compartilhado; SSD/disco pequeno + outros = sistema dedicado; discos parecidos =
+  parte do primeiro + espelho; ignora o próprio pendrive; avisa USB), plano verde/amarelo/vermelho com duas
+  barreiras, APAGAR, nome e senha, checagem de cabo. Particiona (GPT: EFI 512M + root 20G [+ dados]; discos de
+  backup com 1 partição `backeddy-data` de PARTUUID conhecido), copia `rootfs.tar.zst`, cria usuário `admin`
+  (senha do servidor), recria chaves SSH/machine-id, grub-install (removível, shim assinado) + update-grub.
+- Primeiro boot: `backeddy-firstboot` roda o mesmo `install.sh` com `--yes` e os discos por PARTUUID; apaga
+  `/etc/backeddy/firstboot.env` (tem a senha); atualiza `/etc/issue` com endereço e instruções.
+- `install.sh` 0.3.0 funciona offline quando os pacotes já vêm na imagem.
+- `image/build.sh`: mmdebstrap (Debian 13) monta o sistema do servidor (tar.zst, com Kopia) e o do instalador
+  (autologin no tty1 → instalador, fonte Terminus 32); ESP com shim/grub assinados copiados; sistemas de arquivos
+  criados de diretórios (mkfs.ext4 -d, mtools), sem loop; saída .img.xz (Etcher), .vhdx (Hyper-V), SHA256SUMS.
+- Workflow `.github/workflows/image.yml` (container debian:trixie --privileged), manual ou por tag v*.
+- Para dar push em arquivos de workflow, o gh precisa do escopo `workflow` (`gh auth refresh -s workflow`).
 
 ### Plano de construção
 | Fase | Conteúdo | Situação |
 | --- | --- | --- |
 | 0 | Repo BackEddy/server e forma de publicar | Feita |
 | 1 | Script do servidor + VM | Feita (0.1); 0.2/0.2.1 discos testados |
-| 2 | Instalador em Go + imagem do pendrive (.img com partição gravável do plano) | A fazer |
+| 2 | Instalador em Go + imagem do pendrive (.img com partição gravável do plano) | Escrita (0.3.0), falta 1º build e teste |
 | 3 | Painel (monitor + web), **alertas**, arquivo de plano, divisão de espaço | A fazer |
 | 4 | GitHub Actions: mmdebstrap/live-build, testes QEMU, assinatura, Releases | A fazer |
 | 5 | Aba Servidor no Backeddy for Mac 2.1 | A fazer |
