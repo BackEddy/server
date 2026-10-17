@@ -51,6 +51,13 @@ Créditos: Eddy Antonini — eddyantonini.com.br.
   "Configurar com o Backeddy Server" confere a senha; a cada 60 s lê /api/status com Basic auth (backeddy:senha);
   alertas → notificação, ícone vermelho na barra de menus e botões Amanhã/3/7 dias (POST /api/ack {"Days":n}).
   Botões: abrir o painel, atualizar, esquecer.
+- **2.3.0** (17/10/2026): "Montar o Backeddy Server" (ex-"Criar pendrive") começa perguntando onde o servidor roda:
+  PC só para backups (pendrive, como antes) ou máquina virtual num PC com Windows (link fixo
+  github.com/BackEddy/server/releases/latest/download/Instalar-Backeddy.exe com copiar/enviar/baixar, aviso do
+  SmartScreen, tamanho sugerido = 2× o que o Mac ocupa, arredondado a 100 GB; botão "Configurar este Mac").
+  READMEs pt/en/es reescritos para leigos (o que é backup, Time Machine, servidor, máquina virtual; qual é o seu
+  caso; os dois jeitos; quanto espaço; perguntas rápidas). Perfil da organização ganhou a linha do Backeddy Server.
+  Ideia pendente: endereço curto backeddy.com.br/windows (redirecionar para o .exe).
 
 ## Backeddy for Windows (especificado)
 
