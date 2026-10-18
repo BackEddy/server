@@ -23,7 +23,6 @@
 # Pode ser rodado de novo com segurança: reaplica as configurações.
 set -euo pipefail
 
-VERSION="1.0.0"
 NAME="Backup da Casa"
 DISKS=()
 MIRROR=1
@@ -38,6 +37,9 @@ LANG_SET=0
 DATA=/srv/backeddy
 ETC=/etc/backeddy
 SRC="$(cd "$(dirname "$0")" && pwd)"
+# a versão fica num lugar só: o arquivo VERSION (o CI, a atualização automática e a tela usam o mesmo)
+VERSION="$(tr -d ' \r\n' < "$SRC/VERSION" 2>/dev/null || true)"
+[ -n "$VERSION" ] || VERSION="0.0.0"
 
 while [ $# -gt 0 ]; do
   case "$1" in
