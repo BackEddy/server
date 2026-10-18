@@ -297,9 +297,18 @@ $Usb = Join-Path $Dir "pendrive.$Ext"
 Step 0 (T "looking")
 if (-not $Imagem) {
     try {
-        $rel = Invoke-RestMethod -UseBasicParsing "https://api.github.com/repos/BackEddy/server/releases/latest"
-        $asset = $rel.assets | Where-Object { $_.name -match "^backeddy-server-[\d.]+\.$Ext$" } | Select-Object -First 1
-        if ($null -eq $asset) { throw "a versão $($rel.tag_name) não tem o pendrive em .$Ext" }
+        [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+        # a versão mais nova que já tem o pendrive: logo depois de uma versão sair, a imagem ainda está subindo
+        # (leva uns minutos), e aí vale a anterior
+        $rel = $null; $asset = $null
+        $rels = Invoke-RestMethod -UseBasicParsing "https://api.github.com/repos/BackEddy/server/releases?per_page=10"
+        foreach ($r in $rels) {
+            if ($r.draft -or $r.prerelease) { continue }
+            $a = $r.assets | Where-Object { $_.name -match "^backeddy-server-[\d.]+\.$Ext$" -and $_.state -eq "uploaded" } | Select-Object -First 1
+            if ($a) { $rel = $r; $asset = $a; break }
+            Log "a versão $($r.tag_name) ainda não tem o pendrive em .$Ext; tentando a anterior"
+        }
+        if ($null -eq $asset) { throw "nenhuma versão com o pendrive em .$Ext" }
         $dl = Join-Path $Dir $asset.name
         Log "baixando $($asset.browser_download_url)"
         [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
