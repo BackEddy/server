@@ -312,6 +312,26 @@ systemctl enable --now avahi-daemon >/dev/null 2>&1
 systemctl restart avahi-daemon
 ok "Anúncio na rede: aparece na lista do Time Machine"
 
+# ---------- Memória: PCs e VMs com pouca RAM ----------
+# O Kopia recebendo o primeiro backup de um PC pode passar de 300 MB; numa VM de 512 MB o Linux matava o
+# processo (OOM) e o backup do PC caía. Arquivo de troca de 2 GB quando a RAM é pequena, e um teto de memória
+# para o Kopia (GOMEMLIMIT: ele limpa a memória antes de chegar lá).
+RAM_MB=$(awk '/MemTotal/ {print int($2/1024)}' /proc/meminfo)
+if [ "${RAM_MB:-0}" -lt 3072 ] && [ -z "$(swapon --show --noheadings 2>/dev/null)" ] && [ ! -e /swapfile ]; then
+  if [ "$(findmnt -no FSTYPE /)" = btrfs ]; then
+    btrfs filesystem mkswapfile --size 2g /swapfile >/dev/null 2>&1 || true
+  else
+    fallocate -l 2G /swapfile 2>/dev/null && chmod 600 /swapfile && mkswap /swapfile >/dev/null 2>&1 || rm -f /swapfile
+  fi
+  if [ -e /swapfile ] && swapon /swapfile 2>/dev/null; then
+    grep -q '^/swapfile ' /etc/fstab || echo '/swapfile none swap sw 0 0' >> /etc/fstab
+    ok "Memória extra (arquivo de troca de 2 GB): este computador tem só ${RAM_MB} MB"
+  fi
+fi
+KMEM=$(( RAM_MB / 2 )); [ "$KMEM" -lt 200 ] && KMEM=200
+install -d /etc/systemd/system/backeddy-kopia.service.d
+printf '[Service]\nEnvironment=GOMEMLIMIT=%sMiB\n' "$KMEM" > /etc/systemd/system/backeddy-kopia.service.d/memory.conf
+
 # ---------- Kopia Repository Server (PCs Windows) ----------
 KCONF="$ETC/kopia"
 install -d -m 0700 "$KCONF"

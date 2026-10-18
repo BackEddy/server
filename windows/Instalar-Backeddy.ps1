@@ -352,6 +352,10 @@ foreach ($pair in @(@($Sys, 24), @($Data, $cfg.SizeGB))) {
 }
 
 # ---------- 5. Máquina virtual ----------
+# 2 GB de memória (o Kopia recebendo o primeiro backup de um PC passa de 300 MB); 1 GB em PCs com até 6 GB
+$HostRam = (Get-CimInstance Win32_ComputerSystem).TotalPhysicalMemory
+$VmRam = if ($HostRam -le 6GB) { 1GB } else { 2GB }
+Log "memória da VM: $([math]::Round($VmRam / 1GB)) GB (PC com $([math]::Round($HostRam / 1GB)) GB)"
 Step 3
 if ($Motor -eq "hyperv") {
     $sw = Get-VMSwitch -SwitchType External -ErrorAction SilentlyContinue | Select-Object -First 1
@@ -362,7 +366,7 @@ if ($Motor -eq "hyperv") {
         $sw = New-VMSwitch -Name "Backeddy (ponte)" -NetAdapterName $nic.Name -AllowManagementOS $true
         Log "switch criado: $($sw.Name) em $($nic.Name)"
     }
-    New-VM -Name $VmName -Generation 2 -MemoryStartupBytes 512MB -SwitchName $sw.Name -Path $Dir -NoVHD | Out-Null
+    New-VM -Name $VmName -Generation 2 -MemoryStartupBytes $VmRam -SwitchName $sw.Name -Path $Dir -NoVHD | Out-Null
     Set-VMMemory $VmName -DynamicMemoryEnabled $false
     Set-VMProcessor $VmName -Count 2
     Set-VMFirmware $VmName -SecureBootTemplate MicrosoftUEFICertificateAuthority
@@ -381,7 +385,7 @@ if ($Motor -eq "hyperv") {
     $names = (& $VBox list bridgedifs) | Where-Object { $_ -match '^Name:\s+(.+)$' } | ForEach-Object { $Matches[1].Trim() }
     if ($names -notcontains $bridge -and $names.Count -gt 0) { $bridge = $names | Where-Object { $_ -like "*$($nic.Name)*" } | Select-Object -First 1; if (-not $bridge) { $bridge = $names[0] } }
     VBM createvm --name $VmName --ostype Debian_64 --register --basefolder $Dir | Out-Null
-    VBM modifyvm $VmName --memory 512 --cpus 2 --firmware efi --nic1 bridged --bridgeadapter1 $bridge `
+    VBM modifyvm $VmName --memory ([int]($VmRam / 1MB)) --cpus 2 --firmware efi --nic1 bridged --bridgeadapter1 $bridge `
         --graphicscontroller vmsvga --vram 16 --audio-enabled off --usbohci on --mouse usbtablet | Out-Null
     VBM storagectl $VmName --name SATA --add sata --controller IntelAhci --portcount 3 --hostiocache on | Out-Null
     # pendrive na porta 0 (dá a partida) e removível com a VM ligada
