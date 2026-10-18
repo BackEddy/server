@@ -116,6 +116,17 @@ Start-VM $vm
 - [ ] `sudo backeddy alerts` lista o alerta como reconhecido; `sudo backeddy status` mostra quanto o
       Time Machine pode crescer ("pode crescer até …") e quanto os PCs usam
 
+## 7b. Pareamento de PCs (0.9, para o Backeddy for Windows)
+
+No Mac (troque a senha e o nome do servidor):
+```bash
+curl -s -X POST http://backup-da-casa.local/api/pair -d '{"password":"SENHA","name":"PC de Teste"}'
+```
+- [ ] Devolve JSON com `hostname: "pc-de-teste"`, `password`, `url`, `urlIP` e `fingerprint`
+- [ ] Senha errada → `wrong password` (401); 10 erros seguidos → espera 10 minutos (429)
+- [ ] `sudo backeddy pcs` lista `pc-de-teste`; o painel mostra o PC no cartão "PCs com Windows"
+- [ ] Parear de novo o mesmo nome só troca a senha; `sudo backeddy remove-pc pc-de-teste` tira o acesso
+
 ## 8. Wi-Fi e notebook (0.7, hardware de verdade)
 
 O Hyper-V não tem Wi-Fi: use um notebook velho, **sem cabo de rede**.

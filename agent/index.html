@@ -72,6 +72,7 @@ select { padding: 7px 10px; border-radius: 8px; border: 1px solid var(--line); b
         <button class="secondary" id="qsave" data-t="save">Salvar</button> <span class="sub" id="qmsg"></span>
       </div>
     </div>
+    <div class="card"><h2 data-t="pcs">PCs</h2><div class="sub" id="pcs"></div></div>
     <div class="card"><h2 data-t="status">Situação</h2><pre id="status" data-t="loading">Carregando…</pre></div>
   </section>
 </main>
@@ -102,6 +103,8 @@ const TX = {
   wrong: ["Senha errada.", "Wrong password.", "Contraseña incorrecta."],
   saved: ["Salvo.", "Saved.", "Guardado."],
   notSaved: ["Não deu para salvar.", "Couldn't save.", "No se pudo guardar."],
+  pcs: ["PCs com Windows", "Windows PCs", "PC con Windows"],
+  noPCs: ["Nenhum PC pareado ainda. No PC, instale o Backeddy for Windows e escolha este servidor.", "No PCs paired yet. On the PC, install Backeddy for Windows and choose this server.", "Ningún PC emparejado todavía. En el PC, instala Backeddy for Windows y elige este servidor."],
 };
 const t = (k) => TX[k][LANG];
 document.documentElement.lang = ["pt-BR", "en", "es"][LANG];
@@ -129,6 +132,10 @@ async function load() {
   $("qon").checked = on;
   $("qs").value = on ? s.quietStart : 22; $("qe").value = on ? s.quietEnd : 8;
   $("status").textContent = s.status || "";
+  try {
+    const p = await (await fetch("/api/pcs")).json();
+    $("pcs").textContent = p.pcs && p.pcs.length ? p.pcs.join(" · ") : t("noPCs");
+  } catch (e) { $("pcs").textContent = ""; }
 }
 
 $("loginForm").onsubmit = async (e) => {

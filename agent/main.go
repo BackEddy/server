@@ -26,11 +26,13 @@ const (
 	acksPath  = "/var/lib/backeddy/acks"
 	stateDir  = "/run/backeddy"
 	confPath  = "/etc/backeddy/alerts.conf"
-	backeddy  = "/usr/local/bin/backeddy"
 	kiocsound = 0x4B2F
 )
 
 type Alert struct{ ID, Text string }
+
+// backeddy: o comando do servidor (variável para os testes trocarem)
+var backeddy = "/usr/local/bin/backeddy"
 
 var mu sync.Mutex
 var pending []Alert

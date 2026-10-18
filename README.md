@@ -30,6 +30,21 @@
 - The server's own screen shows its health and how to connect (Mac, Windows, SSH), always up to date.
 - `backeddy status` / `wifi` / `add-pc` / `passwd` / `replace-disk` / `add-disk` / `mirror` helper (status, alerts and wifi in the server's language; the other admin commands are still in Portuguese).
 
+## For app developers
+
+The server's agent listens on port 80 (local network). Endpoints used by the Backeddy apps:
+
+| Endpoint | Auth | What it does |
+| --- | --- | --- |
+| `GET /api/hello` | none | `{name, slug, version}` |
+| `GET /api/beep` | none | `{beep, alerts}`: should a watcher beep now |
+| `POST /api/pair` `{"password","name"}` | server password in the body | Creates (or renews) a Kopia server user for a PC and returns `{pc, username, hostname, password, url, urlIP, fingerprint, name}` |
+| `GET /api/status` | Basic `backeddy:PASSWORD` or session | `{name, alerts[{ID,Text}], status, quietStart, quietEnd}` |
+| `GET /api/pcs` | same | `{pcs: [...]}` |
+| `POST /api/ack` `{"days"}` · `POST /api/quiet` | same | Acknowledge alerts · set quiet hours |
+
+Wrong passwords are rate-limited (10 per 10 minutes per address). Kopia clients connect to `url` (or `urlIP`) and must pin `fingerprint`.
+
 ## Install (Debian 12 or 13, as root)
 
 ```bash

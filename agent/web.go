@@ -45,12 +45,17 @@ func serveWeb(addr string) {
 	mux.HandleFunc("/api/status", auth(apiStatus))
 	mux.HandleFunc("/api/ack", auth(apiAck))
 	mux.HandleFunc("/api/quiet", auth(apiQuiet))
+	mux.HandleFunc("/api/pair", apiPair) // a senha vai no corpo (Backeddy for Windows)
+	mux.HandleFunc("/api/pcs", auth(apiPCs))
 	srv := &http.Server{Addr: addr, Handler: mux, ReadHeaderTimeout: 10 * time.Second}
 	log.Printf("interface web em %s", addr)
 	if err := srv.ListenAndServe(); err != nil {
 		log.Printf("interface web: %v", err)
 	}
 }
+
+// passwordOK: checkPassword, trocável nos testes
+var passwordOK = checkPassword
 
 // checkPassword compara com o hash NT do usuário backeddy no Samba (a senha do servidor).
 func checkPassword(pw string) bool {
@@ -111,7 +116,7 @@ func auth(next http.HandlerFunc) http.HandlerFunc {
 		}
 		if u, p, ok := r.BasicAuth(); ok && u == "backeddy" {
 			ip := clientIP(r)
-			if !tooMany(ip) && checkPassword(p) {
+			if !tooMany(ip) && passwordOK(p) {
 				next(w, r)
 				return
 			}
@@ -133,7 +138,7 @@ func apiLogin(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "muitas tentativas; espere 10 minutos", http.StatusTooManyRequests)
 		return
 	}
-	if !checkPassword(req.Password) {
+	if !passwordOK(req.Password) {
 		failed(ip)
 		http.Error(w, "senha errada", http.StatusUnauthorized)
 		return

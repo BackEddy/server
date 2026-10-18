@@ -266,6 +266,16 @@ HDs CMR (evitar SMR); notebook é ótimo (8–15 W, bateria = nobreak).
 - .exe sem assinatura (SignPath pediu reputação/links): aviso explicado no README, nas notas da release
   (.github/release-notes.md, body_path no workflow) e nos READMEs do Backeddy for Mac (2.3.1).
 
+### 0.9.0 — pareamento de PCs para o Backeddy for Windows (17/10/2026)
+- Agente: POST /api/pair {password, name} (senha no corpo, mesmo limite de tentativas) → roda `backeddy add-pc NOME --json`
+  e devolve {pc, username: backeddy, hostname, password, url, urlIP, fingerprint, name}; GET /api/pcs (autenticado).
+  `backeddy` e `passwordOK` viraram variáveis para os testes (pair_test.go com um backeddy falso).
+- CLI: add-pc --json (parear de novo troca a senha: kopia server user set), `backeddy pcs`, `backeddy remove-pc NOME`.
+- Painel: cartão "PCs com Windows". README do servidor: tabela da API para desenvolvedores.
+- Backeddy for Windows 0.1 decidido: destinos servidor e HD externo, só arquivos, pareamento pela senha do servidor,
+  instalador .exe (Inno Setup) sem assinatura por enquanto; Windows 10 22H2+/11 x64; só o usuário que instalou;
+  espera com bateria < 20%. Plano em 8 passos (1 = este pareamento; 2 = esqueleto no repositório BackEddy/windows).
+
 ## Pendências gerais
 - Teste real de backup do Time Machine e de um PC no Kopia (ainda não feitos, por opção).
 - Alertas do servidor (lacuna conhecida).
