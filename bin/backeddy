@@ -14,6 +14,7 @@
 #   backeddy quiet INÍCIO FIM  silêncio à noite (ex.: 22 8) · backeddy quiet off
 #   backeddy issue             atualiza a tela do monitor do servidor (situação + como conectar)
 #   backeddy wifi              escolhe a rede Wi-Fi (no próprio servidor, com teclado e monitor)
+#   backeddy update [now|check|on|off|status]   atualização automática do Backeddy Server (ligada por padrão)
 set -euo pipefail
 ETC=/etc/backeddy; DATA=/srv/backeddy; KCONF=$ETC/kopia
 [ "$(id -u)" = 0 ] || { echo "Use: sudo backeddy $*"; exit 1; }
@@ -49,6 +50,44 @@ fi
 # resto, menos uma folga (10% do espaço útil, ou 20 GB se couber), e nunca menos de 20%.
 # Roda a cada hora (backeddy-space.timer) e depois de mudar discos ou espelho.
 SPACE=/var/lib/backeddy/space
+
+# ---------- Atualização automática (1.0) ----------
+# Todo dia de madrugada (backeddy-update.timer) procura uma versão nova no GitHub, espera os backups
+# pararem, confere o SHA-256, roda o install.sh --update e volta para a versão anterior se algo não subir.
+REL=${BACKEDDY_RELEASES:-https://github.com/BackEddy/server/releases/latest/download}
+UPD=/var/lib/backeddy/update
+UCONF=$ETC/update.conf
+update_auto() { [ ! -f "$UCONF" ] || [ "$(awk -F= '$1=="AUTO"{print $2}' "$UCONF")" != 0 ]; }
+ver_newer() { [ "$1" != "$2" ] && [ "$(printf '%s\n%s\n' "$1" "$2" | sort -V | tail -1)" = "$1" ]; }
+latest_version() {
+  local v; v=$(curl -fsSL --max-time 30 "$REL/latest-version.txt" 2>/dev/null | tr -d ' \r\n') || return 1
+  [[ "$v" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || return 1
+  echo "$v"
+}
+# backup em andamento? (Time Machine com arquivos abertos no Samba, ou um PC conectado no Kopia)
+backup_busy() {
+  grep -q "$DATA/timemachine" < <(smbstatus -L 2>/dev/null) && return 0
+  [ "$(ss -Htn state established '( sport = :51515 )' 2>/dev/null | wc -l)" -gt 0 ]
+}
+# o apt atualizou o Kopia (atualizações automáticas): reinicia o servidor dos PCs quando ninguém está usando
+kopia_refresh() {
+  local pid; pid=$(systemctl show -p MainPID --value backeddy-kopia 2>/dev/null || echo 0)
+  [ "${pid:-0}" -gt 0 ] && [ -e /usr/bin/kopia ] && [ /usr/bin/kopia -nt "/proc/$pid" ] && ! backup_busy || return 0
+  logger -t backeddy "Kopia atualizado pelo sistema: reiniciando o servidor dos PCs"
+  systemctl restart backeddy-kopia >/dev/null 2>&1 || true
+}
+update_line() {
+  local last="" fail=""
+  [ -f "$UPD/last-check" ] && last=$(date -d "@$(cat "$UPD/last-check")" '+%d/%m %H:%M' 2>/dev/null || true)
+  [ -f "$UPD/failed" ] && fail=$(cat "$UPD/failed")
+  if [ -n "$fail" ]; then
+    echo "$I_WARN $(mf 'Atualização para a %s falhou; continua na %s (detalhes: %s/last.log)' 'Update to %s failed; still on %s (details: %s/last.log)' 'La actualización a la %s falló; sigue en la %s (detalles: %s/last.log)' "$fail" "$VERSION" "$UPD")"
+  elif update_auto; then
+    echo "$I_OK $(mf 'Atualizações automáticas: ligadas%s' 'Automatic updates: on%s' 'Actualizaciones automáticas: activadas%s' "${last:+ · $(m 'última verificação' 'last check' 'última comprobación') $last}")"
+  else
+    echo "$I_OFF $(m 'Atualizações automáticas: desligadas (sudo backeddy update on)' 'Automatic updates: off (sudo backeddy update on)' 'Actualizaciones automáticas: desactivadas (sudo backeddy update on)')"
+  fi
+}
 tm_limit() {
   local used free usable kp reserve floor limit gb tight=0 cur twenty
   mountpoint -q "$DATA" || return 0
@@ -160,6 +199,7 @@ case "${1:-status}" in
     svc smbd "Time Machine (Samba)"
     svc avahi-daemon "$(m 'Anúncio na rede (Avahi)' 'Network announcement (Avahi)' 'Anuncio en la red (Avahi)')"
     svc backeddy-kopia "Kopia Server (PCs)"
+    update_line
     if [ -s /run/backeddy/alerts ]; then
       while IFS='|' read -r _ txt; do echo "$I_BAD $(m 'ALERTA' 'ALERT' 'ALERTA'): $txt"; done < /run/backeddy/alerts
       echo "$IND $(m 'O servidor está bipando. Para parar: sudo backeddy ack (ou aperte uma tecla no servidor)' 'The server is beeping. To stop it: sudo backeddy ack (or press a key on the server)' 'El servidor está pitando. Para detenerlo: sudo backeddy ack (o pulsa una tecla en el servidor)')"
@@ -221,6 +261,7 @@ case "${1:-status}" in
       fi
     fi
     echo
+    [ -f "$UPD/failed" ] && echo "update-failed|$(mf 'A atualização automática para a versão %s falhou (o servidor continua funcionando na %s)' 'The automatic update to version %s failed (the server keeps running %s)' 'La actualización automática a la versión %s falló (el servidor sigue funcionando con la %s)' "$(cat "$UPD/failed")" "$VERSION")"
     for d in $(lsblk -dno NAME,TYPE | awk '$2=="disk"{print $1}'); do
       H=$(smartctl -H "/dev/$d" 2>/dev/null | awk -F: '/overall-health|SMART Health Status/{gsub(/^ +/,"",$2);print $2}')
       case "$H" in PASSED|OK) echo "$I_OK /dev/$d $(m 'saudável' 'healthy' 'sano')" ;; "") echo "$I_OFF /dev/$d $(m 'sem SMART (normal em máquina virtual)' 'no SMART (normal in a virtual machine)' 'sin SMART (normal en máquina virtual)')" ;; *) echo "$I_BAD /dev/$d: $H — $(m 'troque este disco!' 'replace this disk!' '¡cambia este disco!')" ;; esac
@@ -486,6 +527,87 @@ case "${1:-status}" in
         E="${3:-8}"
         printf 'QUIET_START=%s\nQUIET_END=%s\n' "$2" "$E" > "$CONF"; mf 'Sem bipe das %sh às %sh.\n' 'No beeping from %s:00 to %s:00.\n' 'Sin pitidos de %s h a %s h.\n' "$2" "$E" ;;
       *) echo "Use: sudo backeddy quiet 22 8   (ou: sudo backeddy quiet off)"; exit 1 ;;
+    esac
+    ;;
+  update)
+    SUB=${2:-now}
+    case "$SUB" in
+      on|off)
+        install -d -m 0755 "$ETC"
+        echo "AUTO=$([ "$SUB" = on ] && echo 1 || echo 0)" > "$UCONF"
+        if [ "$SUB" = on ]; then m 'Atualizações automáticas ligadas.' 'Automatic updates turned on.' 'Actualizaciones automáticas activadas.'
+        else m 'Atualizações automáticas desligadas. Para atualizar: sudo backeddy update now' 'Automatic updates turned off. To update: sudo backeddy update now' 'Actualizaciones automáticas desactivadas. Para actualizar: sudo backeddy update now'; fi
+        echo ;;
+      status) update_line ;;
+      check)
+        L=$(latest_version) || { m 'Não deu para consultar o GitHub (sem internet?).' 'Couldn'"'"'t reach GitHub (no internet?).' 'No se pudo consultar GitHub (¿sin internet?).'; echo; exit 1; }
+        if ver_newer "$L" "$VERSION"; then mf 'Versão nova disponível: %s (instalada: %s)\n' 'New version available: %s (installed: %s)\n' 'Nueva versión disponible: %s (instalada: %s)\n' "$L" "$VERSION"
+        else mf 'Em dia: versão %s\n' 'Up to date: version %s\n' 'Al día: versión %s\n' "$VERSION"; fi ;;
+      now|auto)
+        # roda de uma cópia: o install.sh troca este arquivo no meio do caminho
+        if [ -z "${BACKEDDY_UPDATE_COPY:-}" ]; then
+          cp "$0" /run/backeddy-update.sh
+          BACKEDDY_UPDATE_COPY=1 exec bash /run/backeddy-update.sh update "$SUB"
+        fi
+        exec 9>/run/backeddy-update.lock
+        flock -n 9 || { m 'Já tem uma atualização em andamento.' 'An update is already running.' 'Ya hay una actualización en curso.'; echo; exit 0; }
+        install -d -m 0755 "$UPD"
+        if [ "$SUB" = auto ] && ! update_auto; then kopia_refresh; exit 0; fi
+        L=$(latest_version) || { logger -t backeddy "atualização: GitHub inacessível"; m 'Não deu para consultar o GitHub (sem internet?).' 'Couldn'"'"'t reach GitHub (no internet?).' 'No se pudo consultar GitHub (¿sin internet?).'; echo; exit 0; }
+        date +%s > "$UPD/last-check"
+        if ! ver_newer "$L" "$VERSION"; then
+          rm -f "$UPD/failed"
+          kopia_refresh
+          mf 'Em dia: versão %s\n' 'Up to date: version %s\n' 'Al día: versión %s\n' "$VERSION"; exit 0
+        fi
+        # tentou essa versão e falhou: não insiste toda noite (só na mão, com "now")
+        if [ "$SUB" = auto ] && [ "$(cat "$UPD/failed" 2>/dev/null)" = "$L" ]; then exit 0; fi
+        if [ "$SUB" = auto ]; then
+          for _ in $(seq 1 18); do backup_busy || break; sleep 600; done   # espera até 3 h os backups pararem
+        fi
+        mf 'Atualizando de %s para %s…\n' 'Updating from %s to %s…\n' 'Actualizando de %s a %s…\n' "$VERSION" "$L"
+        logger -t backeddy "atualizando de $VERSION para $L"
+        rm -rf "$UPD/dl" "$UPD/new"; install -d "$UPD/dl"
+        if ! curl -fsSL --max-time 600 -o "$UPD/dl/backeddy-server.tar.gz" "$REL/backeddy-server.tar.gz" \
+           || ! curl -fsSL --max-time 60 -o "$UPD/dl/backeddy-server.tar.gz.sha256" "$REL/backeddy-server.tar.gz.sha256" \
+           || ! (cd "$UPD/dl" && sha256sum -c --status backeddy-server.tar.gz.sha256); then
+          logger -t backeddy "atualização: download ou SHA-256 falhou"
+          m 'O download falhou ou não confere. Nada foi mudado.' 'The download failed or doesn'"'"'t match. Nothing was changed.' 'La descarga falló o no coincide. No se cambió nada.'; echo; exit 1
+        fi
+        tar -xzf "$UPD/dl/backeddy-server.tar.gz" -C "$UPD/dl"
+        mv "$UPD/dl/backeddy-server" "$UPD/new"
+        [ -f "$UPD/new/install.sh" ] && [ "$(tr -d ' \n' < "$UPD/new/VERSION")" = "$L" ] \
+          || { logger -t backeddy "atualização: pacote inválido"; exit 1; }
+        # cópia do que está instalado hoje, para voltar se algo der errado
+        RB=()
+        for f in /usr/local/bin/backeddy /usr/local/sbin/backeddy-agent /usr/local/sbin/backeddy-mount \
+                 /etc/systemd/system/backeddy-*.service /etc/systemd/system/backeddy-*.timer \
+                 /etc/systemd/system/getty@tty1.service.d/backeddy.conf /etc/samba/smb.conf \
+                 /etc/avahi/services/backeddy.service "$ETC/server.conf"; do [ -e "$f" ] && RB+=("$f"); done
+        tar -czPf "$UPD/rollback.tgz" "${RB[@]}"
+        OK=1
+        bash "$UPD/new/install.sh" --update >"$UPD/last.log" 2>&1 || OK=0
+        sleep 15
+        for u in smbd avahi-daemon backeddy-kopia backeddy-agent; do
+          systemctl list-unit-files "$u.service" >/dev/null 2>&1 || continue
+          case "$(systemctl is-active "$u" 2>/dev/null)" in active|activating) ;; *) OK=0; echo "parado: $u" >> "$UPD/last.log" ;; esac
+        done
+        if [ "$OK" = 1 ]; then
+          rm -f "$UPD/failed"
+          [ -d /opt/backeddy-server ] && cp -a "$UPD/new/." /opt/backeddy-server/
+          logger -t backeddy "atualizado para $L"
+          mf 'Pronto: versão %s.\n' 'Done: version %s.\n' 'Listo: versión %s.\n' "$L"
+        else
+          tar -xzPf "$UPD/rollback.tgz"
+          systemctl daemon-reload
+          for u in smbd avahi-daemon backeddy-kopia backeddy-agent; do systemctl restart "$u" >/dev/null 2>&1 || true; done
+          echo "$L" > "$UPD/failed"
+          logger -t backeddy "atualização para $L falhou; voltou para $VERSION"
+          mf 'A atualização falhou; o servidor voltou para a %s. Detalhes: %s/last.log\n' 'The update failed; the server went back to %s. Details: %s/last.log\n' 'La actualización falló; el servidor volvió a la %s. Detalles: %s/last.log\n' "$VERSION" "$UPD"
+          exit 1
+        fi
+        /usr/local/bin/backeddy issue >/dev/null 2>&1 || true ;;
+      *) echo "Use: backeddy update [now|check|on|off|status]"; exit 1 ;;
     esac
     ;;
   wifi)

@@ -47,6 +47,7 @@ func serveWeb(addr string) {
 	mux.HandleFunc("/api/quiet", auth(apiQuiet))
 	mux.HandleFunc("/api/pair", apiPair) // a senha vai no corpo (Backeddy for Windows)
 	mux.HandleFunc("/api/pcs", auth(apiPCs))
+	mux.HandleFunc("/api/update", auth(apiUpdate))
 	srv := &http.Server{Addr: addr, Handler: mux, ReadHeaderTimeout: 10 * time.Second}
 	log.Printf("interface web em %s", addr)
 	if err := srv.ListenAndServe(); err != nil {
@@ -247,4 +248,19 @@ func apiQuiet(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// "Procurar atualização agora" no painel: roda o backeddy update numa unidade própria do systemd,
+// para continuar mesmo quando a atualização reinicia este vigia.
+func apiUpdate(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "use POST", http.StatusMethodNotAllowed)
+		return
+	}
+	cmd := exec.Command("systemd-run", "--no-block", "--collect", "--unit=backeddy-update-now", backeddy, "update", "now")
+	if out, err := cmd.CombinedOutput(); err != nil {
+		http.Error(w, strings.TrimSpace(string(out)), http.StatusConflict)
+		return
+	}
+	w.WriteHeader(http.StatusAccepted)
 }

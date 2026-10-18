@@ -18,17 +18,19 @@
 #                      não apaga nada e restaura nome, senhas do Kopia e certificado guardados neles
 #   --yes              Não pergunta nada (exige BACKEDDY_PASSWORD no ambiente)
 #   --lang pt|en|es    Idioma da tela do servidor, do status e dos alertas (padrão: pt)
+#   --update           Atualização (usado pelo "backeddy update"): mantém nome, idioma, senha e discos
 #
 # Pode ser rodado de novo com segurança: reaplica as configurações.
 set -euo pipefail
 
-VERSION="0.9.0"
+VERSION="1.0.0"
 NAME="Backup da Casa"
 DISKS=()
 MIRROR=1
 TM_PERCENT=60
 ASSUME_YES=0
 RECOVER=0
+UPDATE=0
 NAME_SET=0
 TM_SET=0
 UI_LANG=pt
@@ -44,9 +46,10 @@ while [ $# -gt 0 ]; do
     --no-mirror) MIRROR=0; shift ;;
     --tm-percent) TM_PERCENT="$2"; TM_SET=1; shift 2 ;;
     --recover) RECOVER=1; shift ;;
+    --update) UPDATE=1; ASSUME_YES=1; shift ;;
     --yes) ASSUME_YES=1; shift ;;
     --lang) UI_LANG="$2"; LANG_SET=1; shift 2 ;;
-    -h|--help) sed -n '2,22p' "$0"; exit 0 ;;
+    -h|--help) sed -n '2,23p' "$0"; exit 0 ;;
     *) echo "Opção desconhecida: $1"; exit 1 ;;
   esac
 done
@@ -67,9 +70,21 @@ case "$OS_VER" in 12|13) ;; *) echo "Aviso: testado no Debian 12 e 13 (este é $
 
 printf '\n\033[1m🌀 Backeddy Server %s\033[0m\n' "$VERSION"
 
+# ---------- Atualização: tudo como já está ----------
+if [ "$UPDATE" = 1 ]; then
+  [ -f "$ETC/server.conf" ] || die "--update: este servidor ainda não foi instalado."
+  [ "${#DISKS[@]}" -eq 0 ] && [ "$RECOVER" = 0 ] || die "--update não mexe em discos."
+  SAVED_NAME=$(. "$ETC/server.conf"; echo "${NAME:-}")
+  SAVED_TM=$(. "$ETC/server.conf"; echo "${TM_PERCENT:-}")
+  SAVED_LANG=$(. "$ETC/server.conf"; echo "${UI_LANG:-}")
+  [ -z "$SAVED_NAME" ] || NAME="$SAVED_NAME"
+  [ -z "$SAVED_TM" ] || TM_PERCENT="$SAVED_TM"
+  [ -z "$SAVED_LANG" ] || UI_LANG="$SAVED_LANG"
+fi
+
 # ---------- Senha ----------
 PASSWORD="${BACKEDDY_PASSWORD:-}"
-if [ -z "$PASSWORD" ]; then
+if [ -z "$PASSWORD" ] && [ "$UPDATE" != 1 ]; then
   [ "$ASSUME_YES" = 1 ] && die "Com --yes, defina BACKEDDY_PASSWORD."
   while :; do
     read -rsp "Senha do servidor (usada pelos Macs e PCs): " P1; echo
@@ -258,7 +273,8 @@ if [ -d "$DATA/timemachine" ] && [ "$(stat -c %u "$DATA/timemachine")" != "$(id 
 fi
 install -d -m 0700 -o backeddy -g backeddy "$DATA/timemachine"
 install -d -m 0700 -o root -g root "$DATA/kopia"
-printf '%s\n%s\n' "$PASSWORD" "$PASSWORD" | smbpasswd -s -a backeddy >/dev/null
+# na atualização a senha não muda (o Samba já tem)
+[ "$UPDATE" = 1 ] || printf '%s\n%s\n' "$PASSWORD" "$PASSWORD" | smbpasswd -s -a backeddy >/dev/null
 smbpasswd -e backeddy >/dev/null
 ok "Usuário \"backeddy\" e pastas em $DATA"
 
@@ -339,8 +355,17 @@ printf '[Login]\nHandleLidSwitch=ignore\nHandleLidSwitchExternalPower=ignore\nHa
   > /etc/systemd/logind.conf.d/backeddy.conf
 printf 'APT::Periodic::Update-Package-Lists "1";\nAPT::Periodic::Unattended-Upgrade "1";\n' \
   > /etc/apt/apt.conf.d/20auto-upgrades
+# o Kopia vem do repositório dele: entra nas atualizações automáticas também
+printf 'Unattended-Upgrade::Origins-Pattern {\n  "site=packages.kopia.io";\n};\n' > /etc/apt/apt.conf.d/52backeddy-kopia
 systemctl enable --now smartd >/dev/null 2>&1 || true
-ok "Nunca dorme (nem com a tampa fechada) e se atualiza sozinho"
+# o próprio Backeddy Server: procura versão nova toda madrugada (backeddy update off desliga)
+install -m 0644 "$SRC/config/backeddy-update.service" /etc/systemd/system/backeddy-update.service
+install -m 0644 "$SRC/config/backeddy-update.timer" /etc/systemd/system/backeddy-update.timer
+[ -f "$ETC/update.conf" ] || echo "AUTO=1" > "$ETC/update.conf"
+systemctl daemon-reload
+systemctl enable backeddy-update.timer >/dev/null 2>&1 || true
+systemctl start --no-block backeddy-update.timer >/dev/null 2>&1 || true
+ok "Nunca dorme (nem com a tampa fechada) e se atualiza sozinho (sistema, Kopia e Backeddy)"
 
 install -m 0755 "$SRC/bin/backeddy" /usr/local/bin/backeddy
 
@@ -389,6 +414,10 @@ systemctl start --no-block backeddy-space.timer >/dev/null 2>&1 || true
 /usr/local/bin/backeddy issue >/dev/null 2>&1 || true
 ok "Tela do servidor mostra a situação e como conectar"
 
+if [ "$UPDATE" = 1 ]; then
+  printf '\n✅  Backeddy Server atualizado para %s\n' "$VERSION"
+  exit 0
+fi
 IP=$(hostname -I | awk '{print $1}')
 cat <<MSG
 

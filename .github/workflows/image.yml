@@ -26,6 +26,9 @@ jobs:
       - name: Montar a imagem
         run: bash image/build.sh
 
+      - name: Pacote da atualização automática
+        run: bash image/bundle.sh
+
       - name: Guardar como artefato
         uses: actions/upload-artifact@v4
         with:

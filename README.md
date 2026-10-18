@@ -4,12 +4,12 @@
 
 <p align="center"><b>Turn any old PC into a backup server for your Macs (Time Machine) and Windows PCs.</b></p>
 
-> **Status: community preview (0.8).** Setup, the server screen, alerts and the web panel speak **English, Português and Español**. New to all this? The [Backeddy for Mac page](https://github.com/BackEddy/mac#readme) explains Time Machine, backup servers and virtual machines in plain words.
+> **Status: 1.0 — early community release.** Test it alongside another copy of anything you can't lose. Setup, the server screen, alerts and the web panel speak **English, Português and Español**. New to all this? The [Backeddy for Mac page](https://github.com/BackEddy/mac#readme) explains Time Machine, backup servers and virtual machines in plain words.
 
 ## Get it
 
 - **A spare PC or laptop (it gets erased):** write the USB drive with the [Backeddy for Mac](https://github.com/BackEddy/mac/releases/latest) app (or balenaEtcher with `backeddy-server-*.img.xz` from [Releases](https://github.com/BackEddy/server/releases/latest)), boot the PC from it and follow the graphical installer. UEFI PCs (about 2012 onward); cable or Wi-Fi.
-- **A Windows PC that's always on (nothing gets erased):** download and run **[Instalar-Backeddy.exe](https://github.com/BackEddy/server/releases/latest/download/Instalar-Backeddy.exe)**. It creates a small virtual machine (Hyper-V, or VirtualBox on Windows Home) that boots the same installer.
+- **A Windows PC that's always on (nothing gets erased):** download and run **[Instalar-Backeddy.exe](https://github.com/BackEddy/server/releases/latest/download/Instalar-Backeddy.exe)**. It creates a small virtual machine (Hyper-V, or VirtualBox on Windows Home) that boots the same installer. *That PC's own files are not protected by the server running inside it — back them up to an external drive or another server.*
 - **A fresh Debian 12/13:** the install script below.
 
 > ⚠️ **"Windows protected your PC":** `Instalar-Backeddy.exe` isn't digitally signed yet (we're working on it), so Windows SmartScreen warns about it. Click **More info › Run anyway**. It's built by GitHub Actions straight from the open-source code in [`windows/`](windows/). · *PT: o instalador ainda não tem assinatura digital; clique em **Mais informações › Executar assim mesmo**. · ES: el instalador aún no tiene firma digital; haz clic en **Más información › Ejecutar de todas formas**.*
@@ -26,7 +26,8 @@
 - **Already have a Windows server/NAS?** `Instalar-Backeddy.exe` creates a ready Backeddy VM (Hyper-V, or VirtualBox on Windows Home) — nothing gets formatted — and a tray watcher that beeps on the Windows side.
 - **Wi-Fi when there's no cable** (USB stick): the installer lists the networks and asks for the password; cable always wins when plugged in. Change networks later on the server itself with `sudo backeddy wifi`.
 - **Old laptop as a server**: lid closed is fine, the battery works as a UPS, the server beeps when the power goes out and shuts down safely at 10%.
-- **Never sleeps**, **automatic security updates**, **SMART disk monitoring**.
+- **Never sleeps**, **SMART disk monitoring** and **updates itself**: Debian and Kopia through automatic updates, and Backeddy Server every night (it waits for backups to finish, checks the download's SHA-256 and rolls back if anything fails to start). `sudo backeddy update off` turns it off; `sudo backeddy update now` or the panel's button checks right away.
+- **Updating a 0.9 or older server** (once, by hand; from 1.0 on it's automatic): `cd /tmp && curl -fsSLO https://github.com/BackEddy/server/releases/latest/download/backeddy-server.tar.gz && tar xzf backeddy-server.tar.gz && sudo bash backeddy-server/install.sh --update`
 - The server's own screen shows its health and how to connect (Mac, Windows, SSH), always up to date.
 - `backeddy status` / `wifi` / `add-pc` / `passwd` / `replace-disk` / `add-disk` / `mirror` helper (status, alerts and wifi in the server's language; the other admin commands are still in Portuguese).
 

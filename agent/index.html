@@ -72,6 +72,13 @@ select { padding: 7px 10px; border-radius: 8px; border: 1px solid var(--line); b
         <button class="secondary" id="qsave" data-t="save">Salvar</button> <span class="sub" id="qmsg"></span>
       </div>
     </div>
+    <div class="card">
+      <h2 data-t="updates">Atualizações</h2>
+      <div class="row">
+        <span class="sub" data-t="updHint">O servidor se atualiza sozinho de madrugada.</span>
+        <button class="secondary" id="upd" data-t="updNow">Procurar atualização agora</button> <span class="sub" id="umsg"></span>
+      </div>
+    </div>
     <div class="card"><h2 data-t="pcs">PCs</h2><div class="sub" id="pcs"></div></div>
     <div class="card"><h2 data-t="status">Situação</h2><pre id="status" data-t="loading">Carregando…</pre></div>
   </section>
@@ -103,6 +110,11 @@ const TX = {
   wrong: ["Senha errada.", "Wrong password.", "Contraseña incorrecta."],
   saved: ["Salvo.", "Saved.", "Guardado."],
   notSaved: ["Não deu para salvar.", "Couldn't save.", "No se pudo guardar."],
+  updates: ["Atualizações", "Updates", "Actualizaciones"],
+  updHint: ["O servidor se atualiza sozinho de madrugada.", "The server updates itself overnight.", "El servidor se actualiza solo de madrugada."],
+  updNow: ["Procurar atualização agora", "Check for updates now", "Buscar actualización ahora"],
+  updStarted: ["Procurando… se houver versão nova, o servidor se atualiza e o painel volta em alguns minutos.", "Checking… if there's a new version, the server updates itself and the panel comes back in a few minutes.", "Buscando… si hay una versión nueva, el servidor se actualiza y el panel vuelve en unos minutos."],
+  updBusy: ["Já tem uma atualização em andamento.", "An update is already running.", "Ya hay una actualización en curso."],
   pcs: ["PCs com Windows", "Windows PCs", "PC con Windows"],
   noPCs: ["Nenhum PC pareado ainda. No PC, instale o Backeddy for Windows e escolha este servidor.", "No PCs paired yet. On the PC, install Backeddy for Windows and choose this server.", "Ningún PC emparejado todavía. En el PC, instala Backeddy for Windows y elige este servidor."],
 };
@@ -155,6 +167,11 @@ $("qsave").onclick = async () => {
   const r = await fetch("/api/quiet", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
   $("qmsg").textContent = r.ok ? t("saved") : t("notSaved");
   setTimeout(() => $("qmsg").textContent = "", 3000);
+};
+
+$("upd").onclick = async () => {
+  const r = await fetch("/api/update", { method: "POST" });
+  $("umsg").textContent = r.ok ? t("updStarted") : t("updBusy");
 };
 
 load();

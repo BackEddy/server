@@ -1,3 +1,6 @@
+**1.0 — updates itself from now on** (Debian, Kopia and Backeddy Server, every night, with rollback). · **Se atualiza sozinho daqui em diante.** · **Se actualiza solo a partir de ahora.**
+Servers on 0.9 or older: update once by hand — see the README ("Updating a 0.9 or older server").
+
 **Mac user?** The easiest way to set up a server is the [Backeddy for Mac](https://github.com/BackEddy/mac#readme) app: it writes the USB drive for you and explains everything. · Usa Mac? O jeito mais fácil é o app [Backeddy for Mac](https://github.com/BackEddy/mac/blob/main/README.pt-BR.md). · ¿Usas Mac? Lo más fácil es la app [Backeddy for Mac](https://github.com/BackEddy/mac/blob/main/README.es.md).
 
 | File | What it's for |

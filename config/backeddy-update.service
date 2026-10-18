@@ -1,0 +1,9 @@
+[Unit]
+Description=Backeddy: atualização automática do servidor
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/backeddy update auto
+TimeoutStartSec=5h

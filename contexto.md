@@ -37,7 +37,6 @@ Créditos: Eddy Antonini — eddyantonini.com.br.
 - Renomeado em 16/10/2026: bundle **br.com.backeddy.mac**, versão **2.0.0**, migra histórico/log/ajustes
   do Force TM na primeira abertura. Repo transferido `lordironballs/force-tm` → `BackEddy/mac` (redirects ok).
 - Fora da Mac App Store por causa do sandbox (decisão aceita).
-- Pendente: ícone e screenshot com a marca Backeddy (ainda são do Force TM).
 - **2.1.0** (17/10/2026, testada): **Criar pendrive do Backeddy Server** (Sources/Pendrive.swift: lista discos físicos
   removíveis sem o do Mac e os do TM; baixa o .img.xz da última release + SHA256SUMS, cache em
   ~/Library/Caches/br.com.backeddy.mac/pendrive; confirma digitando APAGAR; grava com `/usr/libexec/authopen
@@ -46,18 +45,11 @@ Créditos: Eddy Antonini — eddyantonini.com.br.
   `tmutil setdestination [-a] smb://backeddy:SENHA@slug.local/TimeMachine && tmutil enable && tmutil startbackup`
   via runAdmin; pergunta "usar os dois" se já houver destino). Info.plist ganhou NSLocalNetworkUsageDescription,
   NSBonjourServices e NSAllowsLocalNetworking.
-- **2.2.0** (17/10/2026, notarizada e publicada): aba **Servidor** (Sources/Server.swift): guarda o servidor
-  (UserDefaults serverHost/serverName) e a senha nas Chaves (serviço br.com.backeddy.mac.server) quando o
-  "Configurar com o Backeddy Server" confere a senha; a cada 60 s lê /api/status com Basic auth (backeddy:senha);
-  alertas → notificação, ícone vermelho na barra de menus e botões Amanhã/3/7 dias (POST /api/ack {"Days":n}).
-  Botões: abrir o painel, atualizar, esquecer.
-- **2.3.0** (17/10/2026): "Montar o Backeddy Server" (ex-"Criar pendrive") começa perguntando onde o servidor roda:
-  PC só para backups (pendrive, como antes) ou máquina virtual num PC com Windows (link fixo
-  github.com/BackEddy/server/releases/latest/download/Instalar-Backeddy.exe com copiar/enviar/baixar, aviso do
-  SmartScreen, tamanho sugerido = 2× o que o Mac ocupa, arredondado a 100 GB; botão "Configurar este Mac").
-  READMEs pt/en/es reescritos para leigos (o que é backup, Time Machine, servidor, máquina virtual; qual é o seu
-  caso; os dois jeitos; quanto espaço; perguntas rápidas). Perfil da organização ganhou a linha do Backeddy Server.
-  Ideia pendente: endereço curto backeddy.com.br/windows (redirecionar para o .exe).
+- **2.2.0** (17/10/2026): aba **Servidor** (Sources/Server.swift): guarda o servidor (UserDefaults serverHost/serverName)
+  e a senha nas Chaves (serviço br.com.backeddy.mac.server) quando o "Configurar com o Backeddy Server" confere a senha;
+  a cada 60 s lê /api/status com Basic auth (backeddy:senha); alertas → notificação, ícone vermelho na barra de menus e
+  botões Amanhã/3/7 dias (POST /api/ack {"Days":n}). Botões: abrir o painel, atualizar, esquecer.
+- Pendente: ícone e screenshot com a marca Backeddy.
 
 ## Backeddy for Windows (especificado)
 
@@ -252,29 +244,8 @@ HDs CMR (evitar SMR); notebook é ótimo (8–15 W, bateria = nobreak).
   Alerta `no-net`.
 - Modo notebook (só se houver /sys/class/power_supply/BAT*): bateria no status; sem energia na tomada → alerta
   `power` (bipa) e desliga com segurança em 10%. Tampa fechada já não suspendia (logind, desde 0.3).
-- Testes: parseIwScan, roteiro com Wi-Fi (senha errada → certa) e sem placa. Os pacotes de firmware existem no
-  trixie (o build da v0.7.0 passou).
-
-### 0.8.0 — três idiomas e preparo para a comunidade (17/10/2026)
-- Instalador do servidor (Go) em pt/en/es: primeira tela "Idioma · Language · Idioma"; installer/i18n.go (T() com chave em
-  português, trUI traduz tudo o que vai para a tela) + i18n_catalog.go (≈256 textos); palavras digitadas viram ERASE/BORRAR,
-  CONTINUE, EXIT. Teste TestFlowEnglish. `--shots DIR --lang en` para ver as telas.
-- Idioma vai para o servidor: env UI_LANG → install.sh --lang → server.conf UI_LANG. bin/backeddy (status, tela do monitor,
-  alertas, alerts/ack/quiet, wifi) e o primeiro boot traduzidos com m/mf; marcas do console [ WARN ]/[ FAIL ]/[ERROR ].
-  Comandos de administração (add-pc, passwd, replace-disk, add-disk, mirror, unmirror) ainda só em português.
-- Painel web segue o idioma do navegador. Instalador do Windows (.exe) e escudo da bandeja seguem o idioma do Windows.
-- .exe sem assinatura (SignPath pediu reputação/links): aviso explicado no README, nas notas da release
-  (.github/release-notes.md, body_path no workflow) e nos READMEs do Backeddy for Mac (2.3.1).
-
-### 0.9.0 — pareamento de PCs para o Backeddy for Windows (17/10/2026)
-- Agente: POST /api/pair {password, name} (senha no corpo, mesmo limite de tentativas) → roda `backeddy add-pc NOME --json`
-  e devolve {pc, username: backeddy, hostname, password, url, urlIP, fingerprint, name}; GET /api/pcs (autenticado).
-  `backeddy` e `passwordOK` viraram variáveis para os testes (pair_test.go com um backeddy falso).
-- CLI: add-pc --json (parear de novo troca a senha: kopia server user set), `backeddy pcs`, `backeddy remove-pc NOME`.
-- Painel: cartão "PCs com Windows". README do servidor: tabela da API para desenvolvedores.
-- Backeddy for Windows 0.1 decidido: destinos servidor e HD externo, só arquivos, pareamento pela senha do servidor,
-  instalador .exe (Inno Setup) sem assinatura por enquanto; Windows 10 22H2+/11 x64; só o usuário que instalou;
-  espera com bateria < 20%. Plano em 8 passos (1 = este pareamento; 2 = esqueleto no repositório BackEddy/windows).
+- Testes: parseIwScan, roteiro com Wi-Fi (senha errada → certa) e sem placa. Os pacotes de firmware existem no trixie
+  (o build da v0.7.0 passou).
 
 ## Pendências gerais
 - Teste real de backup do Time Machine e de um PC no Kopia (ainda não feitos, por opção).
@@ -283,3 +254,17 @@ HDs CMR (evitar SMR); notebook é ótimo (8–15 W, bateria = nobreak).
 - Divulgação planejada: r/macapps (precisa de 10 karma local, formato PCP, prefixo [OS], site com
   Política de Privacidade e Termos para o caminho "transparência"), TabNews, Show HN, Product Hunt,
   awesome-mac, AlternativeTo, Homebrew Cask (depois de ter estrelas), vídeo no canal do Eddy.
+
+
+## 1.0.0 (18/10/2026) — atualização automática
+- `backeddy update [now|check|on|off|status]`; timer backeddy-update.timer (03:30 + até 90 min, Persistent). Consulta
+  `releases/latest/download/latest-version.txt`; baixa `backeddy-server.tar.gz` + `.sha256` (gerados por image/bundle.sh
+  no CI, com o vigia compilado); espera até 3 h sem backup (smbstatus -L na pasta timemachine, conexões na 51515);
+  guarda rollback.tgz dos arquivos instalados; roda `install.sh --update` (mantém nome, idioma, senha e discos);
+  confere smbd/avahi/kopia/agent; se falhar, volta e cria o alerta update-failed (não tenta de novo a mesma versão sozinho).
+  Estado em /var/lib/backeddy/update (last-check, failed, last.log); AUTO em /etc/backeddy/update.conf.
+- Kopia entra no unattended-upgrades (site=packages.kopia.io); o servidor dos PCs reinicia quando o binário muda e
+  ninguém está fazendo backup. Painel: botão "Procurar atualização agora" (/api/update → systemd-run). Status mostra a linha.
+- Servidores 0.9: atualizar uma vez na mão (comando no README).
+- Testar: servidor 0.9 → comando manual → 1.0; `backeddy update check`; mudar VERSION para 0.9.9 em
+  /etc/backeddy/server.conf e rodar `backeddy update now` (deve reinstalar a 1.0); simular falha (parar o smbd no meio).
